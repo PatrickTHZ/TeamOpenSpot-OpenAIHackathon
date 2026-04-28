@@ -1,0 +1,1 @@
+# TeamOpenSpot-OpenAIHackathon
