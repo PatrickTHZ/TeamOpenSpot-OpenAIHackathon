@@ -259,7 +259,8 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
   }
 
   const analysis = analyzeFastRisk(request);
-  const score = analysis.score;
+  const requestedActions = detectRequestedActions(request, analysis);
+  const score = scoreWithActionRiskGuard(analysis.score, requestedActions);
 
   return normalizeAssessment({
     score,
@@ -276,7 +277,7 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
     claimDetails: analysis.claimDetails,
     recommendedAction: buildRecommendedAction(score, analysis),
     riskSignals: publicRiskSignals(analysis.signals),
-    requestedActions: detectRequestedActions(request, analysis),
+    requestedActions,
     accountCredibility: analysis.accountCredibility,
     reverseImageSearch: analysis.reverseImageSearch,
     analysisVersion: ANALYSIS_VERSION
@@ -1051,6 +1052,7 @@ function assessClaimSupport(
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
   const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
   const spinachRoutineConcern = detectHighDoseSpinachRoutineConcern(text);
+  const investmentBaitClaim = detectInvestmentBaitClaim(text);
   const eventTicketSalesPost = isEventTicketSalesPost(text);
 
   if (highImpact && trustedSupport) {
@@ -1086,6 +1088,18 @@ function assessClaimSupport(
     scoreDelta -= 22;
   }
 
+  if (investmentBaitClaim && !trustedSupport) {
+    evidenceAgainst.push(investmentBaitClaim.evidenceMessage);
+    missingSignals.push(investmentBaitClaim.missingMessage);
+    claimDetails.push(investmentBaitClaim.detail);
+    signals.push({
+      category: "claim-verification",
+      weight: 20,
+      message: investmentBaitClaim.signalMessage
+    });
+    scoreDelta -= 20;
+  }
+
   if (eventTicketSalesPost && !highImpact && !trustedSupport) {
     missingSignals.push(
       "This looks like an event or ticket post using a bio/link page, so confirm the organizer, venue, or ticket seller before buying."
@@ -1102,7 +1116,13 @@ function assessClaimSupport(
     if (!rapidWeightLossClaim) {
       const localDiscussion = isLocalIncidentDiscussion(text);
       const localDirective = localDiscussion && isPublicSafetyDirective(text);
-      if (!localDiscussion || localDirective) {
+      if (investmentBaitClaim) {
+        signals.push({
+          category: "claim-verification",
+          weight: 6,
+          message: "Investment claim lacks visible trusted support."
+        });
+      } else if (!localDiscussion || localDirective) {
         evidenceAgainst.push(
           localDirective
             ? "This local incident post includes safety guidance, so it should be checked against an official update before relying on it."
@@ -1111,16 +1131,18 @@ function assessClaimSupport(
       } else {
         missingSignals.push("This appears to be a local incident story, not an instruction or sales claim.");
       }
-      signals.push({
-        category: "claim-verification",
-        weight: localDiscussion ? (localDirective ? 8 : 4) : 16,
-        message: localDiscussion
-          ? localDirective
-            ? "Local incident safety guidance lacks independent confirmation."
-            : "Local incident story does not require source verification by default."
-          : "High-impact claim lacks visible trusted support."
-      });
-      scoreDelta -= localDiscussion ? (localDirective ? 4 : 0) : 16;
+      if (!investmentBaitClaim) {
+        signals.push({
+          category: "claim-verification",
+          weight: localDiscussion ? (localDirective ? 8 : 4) : 16,
+          message: localDiscussion
+            ? localDirective
+              ? "Local incident safety guidance lacks independent confirmation."
+              : "Local incident story does not require source verification by default."
+            : "High-impact claim lacks visible trusted support."
+        });
+        scoreDelta -= localDiscussion ? (localDirective ? 4 : 0) : 16;
+      }
     } else {
       signals.push({
         category: "claim-verification",
@@ -1481,6 +1503,49 @@ function detectHighDoseSpinachRoutineConcern(text: string): {
       ],
       guidanceComparison:
         "CDC and NHLBI-style guidance emphasizes gradual weight loss around 1-2 lb per week through overall diet and activity, not a guaranteed single-food routine; kidney and medication guidance also cautions that spinach is high in oxalate and vitamin K."
+    }
+  };
+}
+
+function detectInvestmentBaitClaim(text: string): {
+  evidenceMessage: string;
+  missingMessage: string;
+  signalMessage: string;
+  detail: ClaimDetail;
+} | null {
+  const investmentContext = /\b(ai|chip|stocks?|suppliers?|retail investors?|watchlist|investment|money)\b/.test(text);
+  const privateTipContext =
+    /\b(insider|private tech event|overlooked suppliers?|full watchlist|comment info|leave your number|send the details privately)\b/.test(
+      text
+    );
+  const pressureContext =
+    /\b(biggest money|unbelievable|mainstream media catches on|don't wait too long|opportunity will be gone|once everyone finds out)\b/.test(
+      text
+    );
+
+  if (!investmentContext || !(privateTipContext || pressureContext)) return null;
+
+  return {
+    evidenceMessage:
+      "The post promotes a private investment tip or watchlist using insider/urgency language, but no regulated financial source or verifiable evidence is visible.",
+    missingMessage:
+      "No licensed financial adviser, official filing, reputable financial reporting, or transparent source is visible for the investment claim.",
+    signalMessage: "Private investment watchlist claim uses scam-like pressure without visible trusted support.",
+    detail: {
+      category: "source",
+      status: "unsupported",
+      severity: "high",
+      claim: "A private AI/chip stock watchlist or supplier strategy is presented as an opportunity before the wider market finds out.",
+      explanation:
+        "The post asks the reader to comment, click, or leave a phone number to receive private investment details, while using insider and urgency framing.",
+      missingEvidence: [
+        "Licensed financial adviser or regulated source",
+        "Official company filing or reputable financial reporting",
+        "Transparent public source for the investment claim",
+        "Clear warning about investment risk"
+      ],
+      guidanceComparison:
+        "Legitimate investment information should be verifiable from regulated disclosures, reputable financial reporting, or a licensed adviser; private tips promoted with urgency and contact-detail requests are high risk."
     }
   };
 }
@@ -2274,6 +2339,13 @@ function publicRiskSignals(signals: RiskSignal[]): PublicRiskSignal[] {
       severity: signal.weight >= 16 ? "high" : signal.weight >= 10 ? "medium" : "low",
       message: signal.message
     }));
+}
+
+function scoreWithActionRiskGuard(score: number, actions: RequestedAction[]): number {
+  if (actions.some((action) => action.risk === "high")) {
+    return Math.min(score, 49);
+  }
+  return score;
 }
 
 function detectRequestedActions(

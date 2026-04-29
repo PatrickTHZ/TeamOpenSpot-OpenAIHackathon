@@ -684,6 +684,12 @@ describe("heuristicAssessment", () => {
     expect(result.evidenceAgainst.join(" ")).toContain("urgency, pressure, or scam-like promises");
     expect(result.missingSignals.join(" ")).not.toContain("event or ticket post");
     expect(result.riskSignals?.some((signal) => signal.message.includes("leave your number"))).toBe(true);
+    expect(result.claimDetails?.[0]).toMatchObject({
+      category: "source",
+      status: "unsupported",
+      severity: "high"
+    });
+    expect(result.claimDetails?.[0]?.explanation).toContain("phone number");
     expect(result.requestedActions?.map((action) => action.action)).toEqual(
       expect.arrayContaining(["click_link", "share_personal_info"])
     );
