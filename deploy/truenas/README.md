@@ -30,7 +30,7 @@ cp deploy/truenas/.env.example deploy/truenas/.env
 
 ```text
 OPENAI_API_KEY=sk-your-real-key
-OPENAI_MODEL=gpt-5
+OPENAI_MODEL=gpt-5.2
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 MAX_REQUEST_BYTES=3500000
@@ -46,6 +46,7 @@ EVIDENCE_STORAGE_DIR=/data/evidence
 EVIDENCE_STORE_RAW_TEXT=false
 EVIDENCE_HASH_SALT=change-me
 EVIDENCE_ADMIN_TOKEN=change-me
+ASSESSMENT_LOG_DETAIL=debug
 ```
 
 4. Start the service from the repo root:
@@ -87,7 +88,7 @@ API keys are loaded from `.env` for speed and simple TrueNAS setup:
 
 ```text
 OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5
+OPENAI_MODEL=gpt-5.2
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 MAX_REQUEST_BYTES=3500000
@@ -102,6 +103,7 @@ EVIDENCE_STORAGE_DIR=/data/evidence
 EVIDENCE_STORE_RAW_TEXT=false
 EVIDENCE_HASH_SALT=change-me
 EVIDENCE_ADMIN_TOKEN=change-me
+ASSESSMENT_LOG_DETAIL=debug
 ```
 
 The Android app and Chrome extension must never contain the OpenAI API key. They should call:
@@ -118,4 +120,59 @@ https://trustlens.z2hs.au/v1/assess
 - Web source checking requires `WEB_VERIFICATION_ENABLED=true` and request-level `verificationMode: "web"`; leave it off for fastest feed scanning.
 - Evidence/image storage is disabled by default and requires both `EVIDENCE_STORAGE_ENABLED=true` and request-level `consentToStoreEvidence=true`.
 - The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount.
-- Runtime logs avoid raw post text and only include request ID, client, latency, band, and error category.
+- Runtime logs avoid raw post text. They include request ID, client, safe source host, captured evidence types, score, band, label, risk level, risk signals, latency, OCR status, and storage status.
+
+## Watching Assessment Logs
+
+Follow the backend logs while requests flow through:
+
+```sh
+docker logs -f trustlens-backend
+```
+
+Or with Compose:
+
+```sh
+docker compose -f deploy/truenas/docker-compose.yml logs -f trustlens-backend
+```
+
+Each successful assessment writes one JSON line with `event: "assessment_result"`:
+
+```json
+{
+  "event": "assessment_result",
+  "requestId": "example-id",
+  "latencyMs": 42,
+  "status": "ok",
+  "client": "chrome",
+  "contentType": "post",
+  "sourceHost": "www.instagram.com",
+  "evidence": {
+    "hasUrl": true,
+    "hasVisibleText": true,
+    "hasScreenshotOcrText": true,
+    "linkCount": 1,
+    "hasImageData": false,
+    "hasImageDescription": true
+  },
+  "result": {
+    "score": 71,
+    "band": "yellow",
+    "riskLevel": "medium",
+    "label": "Needs checking"
+  },
+  "riskSignals": [
+    {
+      "category": "claim-verification",
+      "severity": "low",
+      "message": "General wellness advice is plausible but unsourced."
+    }
+  ]
+}
+```
+
+`ASSESSMENT_LOG_DETAIL` controls log size:
+
+- `debug` logs the detailed safe result trace. This is the TrueNAS default.
+- `summary` logs a shorter safe result trace.
+- `off` disables assessment result logs.

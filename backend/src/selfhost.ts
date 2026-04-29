@@ -34,6 +34,7 @@ interface SelfHostEnv {
   EVIDENCE_HASH_SALT?: string;
   EVIDENCE_ADMIN_TOKEN?: string;
   TRAINING_ACCESS_TOKEN?: string;
+  ASSESSMENT_LOG_DETAIL?: string;
 }
 
 const port = Number.parseInt(process.env.PORT || "5072", 10);
@@ -49,7 +50,7 @@ const corsHeaders = {
 
 const env: SelfHostEnv = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-5",
+  OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-5.2",
   OPENAI_TIMEOUT_MS: process.env.OPENAI_TIMEOUT_MS,
   OPENAI_ENABLE_VISION: process.env.OPENAI_ENABLE_VISION,
   MAX_REQUEST_BYTES: process.env.MAX_REQUEST_BYTES,
@@ -64,7 +65,8 @@ const env: SelfHostEnv = {
   EVIDENCE_STORE_RAW_TEXT: process.env.EVIDENCE_STORE_RAW_TEXT,
   EVIDENCE_HASH_SALT: process.env.EVIDENCE_HASH_SALT,
   EVIDENCE_ADMIN_TOKEN: process.env.EVIDENCE_ADMIN_TOKEN,
-  TRAINING_ACCESS_TOKEN: process.env.TRAINING_ACCESS_TOKEN
+  TRAINING_ACCESS_TOKEN: process.env.TRAINING_ACCESS_TOKEN,
+  ASSESSMENT_LOG_DETAIL: process.env.ASSESSMENT_LOG_DETAIL
 };
 
 const server = createServer(async (request, response) => {
@@ -170,27 +172,27 @@ const server = createServer(async (request, response) => {
       }
     }
 
-    console.log(
-      JSON.stringify({
-        requestId,
-        client: assessmentRequest.client,
-        latencyMs: Date.now() - startedAt,
-        band: assessment.band,
-        ocr: ocr.ocr ? "tesseract" : "skipped",
-        evidenceStorage,
-        errorCategory: null
-      })
-    );
+    logAssessmentResult({
+      requestId,
+      startedAt,
+      request: assessmentRequest,
+      assessment,
+      ocrEngine: ocr.ocr ? "tesseract" : "skipped",
+      evidenceStorage,
+      env
+    });
 
     writeJson(response, 200, assessment, requestId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.log(
       JSON.stringify({
+        event: "assessment_error",
         requestId,
         latencyMs: Date.now() - startedAt,
-        band: null,
-        errorCategory: "selfhost"
+        status: "error",
+        errorCategory: "selfhost",
+        errorMessage: message
       })
     );
     const status = message.includes("Provide at least") ||
@@ -229,6 +231,94 @@ function writeBytes(response: ServerResponse, status: number, value: Buffer, con
     "Cache-Control": "private, no-store"
   });
   response.end(value);
+}
+
+function logAssessmentResult(input: {
+  requestId: string;
+  startedAt: number;
+  request: ReturnType<typeof validateAssessRequest>;
+  assessment: Awaited<ReturnType<typeof assessCredibility>>;
+  ocrEngine: "tesseract" | "skipped";
+  evidenceStorage: "skipped" | "saved" | "failed";
+  env: SelfHostEnv;
+}): void {
+  const detail = input.env.ASSESSMENT_LOG_DETAIL || "summary";
+  if (detail === "off") return;
+
+  const request = input.request;
+  const assessment = input.assessment;
+  const base = {
+    event: "assessment_result",
+    requestId: input.requestId,
+    latencyMs: Date.now() - input.startedAt,
+    status: "ok",
+    client: request.client,
+    contentType: request.contentType || "unknown",
+    verificationMode: request.verificationMode || "fast",
+    sourceHost: safeHost(request.url),
+    evidence: {
+      hasUrl: Boolean(request.url),
+      hasVisibleText: Boolean(request.visibleText),
+      hasSelectedText: Boolean(request.selectedText),
+      hasScreenshotOcrText: Boolean(request.screenshotOcrText),
+      linkCount: request.extractedLinks?.length || 0,
+      hasImageData: Boolean(request.imageCrop?.dataUrl),
+      hasImageDescription: Boolean(request.imageCrop?.description),
+      accountContext: Boolean(request.accountContext)
+    },
+    result: {
+      score: assessment.score,
+      band: assessment.band,
+      riskLevel: assessment.riskLevel,
+      label: assessment.label,
+      confidence: assessment.confidence,
+      recommendedAction: assessment.recommendedAction
+    },
+    processing: {
+      openAiConfigured: Boolean(input.env.OPENAI_API_KEY),
+      model: input.env.OPENAI_MODEL || "gpt-5.2",
+      visionEnabled: input.env.OPENAI_ENABLE_VISION === "true",
+      ocr: input.ocrEngine,
+      evidenceStorage: input.evidenceStorage
+    },
+    errorCategory: null
+  };
+
+  if (detail === "debug") {
+    console.log(
+      JSON.stringify({
+        ...base,
+        why: assessment.why,
+        evidenceAgainst: assessment.evidenceAgainst,
+        missingSignals: assessment.missingSignals,
+        riskSignals: assessment.riskSignals,
+        requestedActions: assessment.requestedActions,
+        accountCredibility: assessment.accountCredibility
+      })
+    );
+    return;
+  }
+
+  console.log(
+    JSON.stringify({
+      ...base,
+      why: assessment.why,
+      riskSignals: assessment.riskSignals?.map((signal) => ({
+        category: signal.category,
+        severity: signal.severity,
+        message: signal.message
+      }))
+    })
+  );
+}
+
+function safeHost(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
 }
 
 async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise<unknown> {

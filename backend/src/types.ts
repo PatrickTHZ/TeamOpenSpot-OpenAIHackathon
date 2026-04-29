@@ -23,4 +23,5 @@ export interface Env {
   EVIDENCE_HASH_SALT?: string;
   EVIDENCE_ADMIN_TOKEN?: string;
   TRAINING_ACCESS_TOKEN?: string;
+  ASSESSMENT_LOG_DETAIL?: string;
 }

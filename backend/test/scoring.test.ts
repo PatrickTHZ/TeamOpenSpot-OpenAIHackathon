@@ -331,6 +331,49 @@ describe("heuristicAssessment", () => {
     expect(result.riskSignals?.some((signal) => signal.category === "ai-image-suspicion")).not.toBe(true);
   });
 
+  it("treats plausible food and hydration cramp advice as needs-checking instead of high risk", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      url: "https://www.instagram.com/p/example/",
+      authorName: "healthyfoodtab",
+      authorHandle: "@healthyfoodtab",
+      visibleProfileSignals: ["No verified badge visible in screenshot"],
+      visibleText:
+        "Struggling with leg cramps at night? Your body might need more minerals. Magnesium supports muscle relaxation. Proper hydration is key.",
+      screenshotOcrText:
+        "Leg cramps at night? Fix it naturally. Banana, spinach, pumpkin seeds, avocado, Greek yogurt, water. Magnesium and hydration equals less cramps, better sleep.",
+      imageCrop: {
+        description: "AI-generated wellness infographic about foods, minerals, and hydration for leg cramps."
+      }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(68);
+    expect(result.score).toBeLessThan(75);
+    expect(result.riskLevel).toBe("medium");
+    expect(result.evidenceFor.join(" ")).toContain("broad food, mineral, and hydration advice");
+    expect(result.evidenceAgainst.join(" ")).not.toContain("high-impact claim");
+  });
+
+  it("explains unsupported rapid single-food weight-loss claims specifically", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      url: "https://www.instagram.com/p/spinach-routine-example/",
+      authorName: "instartupa",
+      visibleText:
+        "Some seniors are eating 400g of spinach a day and losing up to 4kg in 30 days. No pills, no gym, one simple daily habit.",
+      screenshotOcrText:
+        "The 400g Spinach Routine. Claimed result: -4kg in 30 days. No pills. No complicated plan.",
+      imageCrop: {
+        description: "Likely AI-generated Instagram infographic about a 400g spinach routine for senior weight loss."
+      }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.evidenceAgainst.join(" ")).toContain("specific rapid weight loss");
+    expect(result.missingSignals.join(" ")).toContain("clinician/dietitian credential");
+    expect(result.riskSignals?.some((signal) => signal.message.includes("Specific rapid weight-loss claim"))).toBe(true);
+  });
+
   it("detects common generated-by-AI image wording", () => {
     const result = heuristicAssessment({
       client: "chrome",

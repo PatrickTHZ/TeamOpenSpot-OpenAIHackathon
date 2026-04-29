@@ -227,6 +227,22 @@ EVIDENCE_HASH_SALT=change-me
 EVIDENCE_ADMIN_TOKEN=long-random-token
 ```
 
+## Container Assessment Logs
+
+The self-host container writes one structured JSON line per assessment to stdout. TrueNAS and Docker show these in the container logs.
+
+```sh
+docker logs -f trustlens-backend
+```
+
+Set `ASSESSMENT_LOG_DETAIL` to control verbosity:
+
+- `debug` logs the detailed safe result trace and is the TrueNAS default.
+- `summary` logs request ID, safe source host, evidence types, score, band, label, risk signals, latency, OCR, and storage status.
+- `off` disables assessment result logs.
+
+Raw post text and image data are not written to runtime logs.
+
 Required request fields:
 
 ```json

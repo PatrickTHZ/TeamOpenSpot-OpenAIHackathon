@@ -558,7 +558,9 @@ function assessSourceCredibility(
     scoreDelta += 8;
   }
 
-  const officialClaim = /official|government|bank|medicare|mygov|ato|police|council|health|emergency/.test(text);
+  const officialClaim =
+    /official|government|bank|medicare|mygov|ato|police|council|emergency/.test(text) ||
+    (/\bhealth\b/.test(text) && !isGeneralNutritionWellnessAdvice(text));
   if (officialClaim && !trustedDomain && !trustedSource) {
     evidenceAgainst.push("The post refers to an official topic but no official source domain is visible.");
     signals.push({
@@ -855,13 +857,14 @@ function assessClaimSupport(
   let scoreDelta = 0;
 
   const imageText = imageEvidenceText(request);
-  const highImpact = /cure|medicine|vaccine|health|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(text);
+  const highImpact = isHighImpactClaim(text);
   const hasNumbers = /\b\d{2,}[%$]?\b|\$\d+/.test(text);
   const hasDate = /\b(today|tomorrow|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/.test(text);
   const trustedDomain = domains.some(isTrustedDomain);
   const trustedSource = trustedSourceFromEvidence(request, domains);
   const trustedSupport = trustedDomain || Boolean(trustedSource && !hasImageManipulationCue(imageText));
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
+  const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
 
   if (highImpact && trustedSupport) {
     evidenceFor.push(
@@ -872,14 +875,29 @@ function assessClaimSupport(
     scoreDelta += 8;
   }
 
-  if (highImpact && !trustedSupport) {
-    evidenceAgainst.push("This is a high-impact claim but no trusted confirming source is visible.");
+  if (rapidWeightLossClaim && !trustedSupport) {
+    evidenceAgainst.push(rapidWeightLossClaim.evidenceMessage);
+    missingSignals.push(rapidWeightLossClaim.missingMessage);
     signals.push({
       category: "claim-verification",
-      weight: 16,
-      message: "High-impact claim lacks visible trusted support."
+      weight: 18,
+      message: rapidWeightLossClaim.signalMessage
     });
-    scoreDelta -= 16;
+    scoreDelta -= 18;
+  }
+
+  if (highImpact && !trustedSupport) {
+    if (!rapidWeightLossClaim) {
+      evidenceAgainst.push("This is a high-impact claim but no trusted confirming source is visible.");
+    }
+    signals.push({
+      category: "claim-verification",
+      weight: rapidWeightLossClaim ? 8 : 16,
+      message: rapidWeightLossClaim
+        ? "Weight-loss claim lacks visible trusted support."
+        : "High-impact claim lacks visible trusted support."
+    });
+    scoreDelta -= rapidWeightLossClaim ? 8 : 16;
   }
 
   if ((hasNumbers || hasDate) && !request.url && !request.extractedLinks?.length) {
@@ -895,6 +913,18 @@ function assessClaimSupport(
       message: "Image-extracted claim lacks visible trusted support."
     });
     scoreDelta -= 16;
+  }
+
+  if (!highImpact && isGeneralNutritionWellnessAdvice(text)) {
+    evidenceFor.push("The visible health tips are broad food, mineral, and hydration advice rather than a specific treatment claim.");
+    evidenceFor.push("The food, mineral, and hydration claims match common guidance for possible cramp contributors.");
+    missingSignals.push("No medical source or clinician credentials are visible for the wellness advice.");
+    signals.push({
+      category: "claim-verification",
+      weight: 4,
+      message: "General wellness advice is plausible but unsourced."
+    });
+    scoreDelta += 2;
   }
 
   if (imageExtractedClaim && /(before|after|after\s+\d+\s+(days?|weeks?|months?|years?))/.test(imageText)) {
@@ -944,7 +974,8 @@ function assessImageSuspicion(
   const imageClaim = hasImageExtractedClaim(imageText);
 
   if (explicitSynthetic || manipulationCue) {
-    const weight = explicitSynthetic ? (imageClaim ? 18 : 8) : 12;
+    const generalWellnessInfographic = explicitSynthetic && isGeneralNutritionWellnessAdvice(`${text} ${imageText}`);
+    const weight = explicitSynthetic ? (imageClaim ? 18 : generalWellnessInfographic ? 4 : 8) : 12;
     evidenceAgainst.push("The image evidence mentions possible editing, AI generation, or manipulation.");
     signals.push({
       category: "ai-image-suspicion",
@@ -976,6 +1007,53 @@ function assessImageSuspicion(
   }
 
   return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
+}
+
+function isHighImpactClaim(text: string): boolean {
+  if (isGeneralNutritionWellnessAdvice(text)) return false;
+  return /cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(
+    text
+  );
+}
+
+function detectRapidWeightLossClaim(text: string): {
+  evidenceMessage: string;
+  missingMessage: string;
+  signalMessage: string;
+} | null {
+  const hasWeightLoss = /\b(weight loss|lose|losing|lost|scale|kg|kilograms?|pounds?|lbs?)\b/.test(text);
+  const hasSpecificAmount = /\b\d+(?:\.\d+)?\s*(?:kg|kilograms?|pounds?|lbs?)\b/.test(text);
+  const hasShortWindow = /\b(?:\d+\s*(?:days?|weeks?)|30\s*days?|few weeks?)\b/.test(text);
+  const hasSingleFoodRoutine =
+    /\b(?:spinach|banana|avocado|yogurt|water|daily habit|one simple daily habit|simple green routine|no gym|no pills|no supplements?)\b/.test(
+      text
+    );
+  const targetsSeniors = /\b(seniors?|elderly|older adults?|over\s*\d{2})\b/.test(text);
+
+  if (!hasWeightLoss || !hasSpecificAmount || !hasShortWindow) return null;
+
+  const audience = targetsSeniors ? " for seniors" : "";
+  const routine = hasSingleFoodRoutine ? " from a single-food/simple daily routine" : "";
+  return {
+    evidenceMessage: `The post claims specific rapid weight loss${audience}${routine}, but no trusted clinical or nutrition source is visible.`,
+    missingMessage:
+      "No citation, clinician/dietitian credential, safety caution, or calorie/lifestyle evidence is visible for the weight-loss claim.",
+    signalMessage:
+      "Specific rapid weight-loss claim lacks visible support and is stronger than general healthy weight-loss guidance."
+  };
+}
+
+function isGeneralNutritionWellnessAdvice(text: string): boolean {
+  const discussesCramps = /\b(leg cramps?|muscle cramps?|cramps? at night|nocturnal cramps?)\b/.test(text);
+  const discussesFoodOrHydration =
+    /\b(magnesium|potassium|calcium|electrolytes?|hydration|water|banana|spinach|avocado|pumpkin seeds?|greek yogurt|minerals?)\b/.test(
+      text
+    );
+  const dangerousSpecificClaim =
+    /\b(cure|treats?|medicine|medication|dose|diabetes|blood pressure|heart disease|cancer|guaranteed|miracle|stop taking|replace your doctor)\b/.test(
+      text
+    );
+  return discussesCramps && discussesFoodOrHydration && !dangerousSpecificClaim;
 }
 
 function buildSummary(score: number, analysis: FastRiskAnalysis): string {
