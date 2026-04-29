@@ -5,6 +5,7 @@ node_modules/
 dist/
 coverage/
 *.log
+.codex-qa/
 evidence/
 backend/evidence/
 data/evidence/

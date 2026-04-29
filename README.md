@@ -1,31 +1,100 @@
-# Credibility Validator Prototype
+# TrustLens
 
-This workspace contains a split prototype for a social media/news credibility helper:
+TrustLens is an Android-first credibility companion for social feeds, screenshots, links, and fast-moving claims. It waits for the user to pause, captures the visible context they are looking at, and returns a plain-language risk label before a scam, hoax, or panic-share gets a chance to travel.
 
-- `backend/` - Cloudflare Workers API that scores visible post/page evidence with OpenAI.
-- `shared/` - API contract shared by both clients.
-- `TEAM_PLAN.md` - 4-person split: 2 frontend roles and 2 backend roles.
-- `deploy/truenas/` - Docker Compose self-hosting plan for `trustlens.z2hs.au:5072`.
-- `docs/API.md` - API variables, examples, source checking, and storage reference.
-- `docs/BACKEND_ROADMAP.md` - prioritized backend feature roadmap.
+[Open the homepage](https://trustlens.z2hs.au) · [Download the Android APK](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/releases/latest/download/trustlens-debug.apk) · [View the public GitHub build](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/actions/workflows/android-apk.yml) · [Open the repository](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon)
 
-Per the current handoff scope, this repo stops after the shared contract and backend. The Chrome extension and Android app can be implemented next against the stable `/v1/assess` contract below.
+## Why It Matters
 
-The product is intentionally cautious: it produces a credibility estimate, not a final fact-check verdict. Missing public evidence is reported as missing instead of invented. Claim verification means checking whether supplied visible evidence supports the claim; it does not pretend to browse or prove facts when no source evidence is present.
+TrustLens is built for the moment when someone sees an urgent post, a miracle product, a suspicious link, or a screenshot that looks official enough to share. Instead of pretending to be an all-knowing fact checker, it looks at the evidence the user can actually see and explains what is supported, what is missing, and what deserves caution.
 
-## Target User Flow
+The product is intentionally careful: it produces a credibility estimate, not a final verdict. Missing public evidence is reported as missing instead of invented.
+
+## What Is Included
+
+- `backend/` - TypeScript Cloudflare Workers API and Docker self-host server.
+- `backend/android/` - Android accessibility-service prototype that can be built into an APK.
+- `shared/` - Shared assessment contract for Android, Chrome, and future clients.
+- `docs/API.md` - API fields, examples, source checking, and storage reference.
+- `deploy/truenas/` - TrueNAS-ready Docker Compose deployment for `trustlens.z2hs.au`.
+- `.github/workflows/android-apk.yml` - Android SDK build that publishes `trustlens-debug.apk` as a workflow artifact and attaches it to tagged releases.
+- `.github/workflows/docker-image.yml` - Docker image build for GHCR.
+
+## Try The Landing Page
+
+The Docker self-host server now serves a TrustLens landing page at `/`, using the TrustLens cream, teal, lavender, and navy palette from the brand direction.
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Public homepage:
 
 ```text
-User opens Facebook/web feed
--> Trust Bubble appears
+https://trustlens.z2hs.au
+```
+
+Local preview:
+
+```text
+http://localhost:5072
+```
+
+Health check:
+
+```powershell
+Invoke-RestMethod http://localhost:5072/health
+```
+
+The homepage and API share the same service without colliding: `/` serves the landing page, while `/v1/assess`, `/v1/schema`, `/v1/evidence`, and `/health` remain API and monitoring routes.
+
+## Download The APK
+
+The stable public download URL is:
+
+```text
+https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/releases/latest/download/trustlens-debug.apk
+```
+
+To publish a new public APK:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions will build `backend/android`, upload the APK artifact, and attach `trustlens-debug.apk` to the GitHub release for that tag.
+
+## Android Build
+
+The Android project uses the Android Gradle Plugin and is built by GitHub Actions with Java 17, the Android SDK, and Gradle.
+
+Local build, if Android tooling is installed:
+
+```powershell
+gradle -p backend/android assembleDebug
+```
+
+Output:
+
+```text
+backend/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+## User Flow
+
+```text
+User opens Facebook or a web feed
+-> TrustLens appears
 -> user scrolls
--> app waits, no capture
+-> app waits without capture
 -> user pauses for about 1.5 seconds
--> capture visible post area
--> extract text, image/OCR text, and links
+-> app captures visible post area
+-> app extracts text, image/OCR text, and links
 -> backend analyses scam language, source signals, link mismatch, and visible evidence
--> bubble shows Low / Medium / High risk
--> user taps bubble for a simple explanation and advice
+-> TrustLens shows Low / Medium / High risk
+-> user taps for a simple explanation and next step
 ```
 
 Post labels:
@@ -53,33 +122,28 @@ OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 ```
 
-Backend-only Docker quick start:
+For production, store the key as a Cloudflare Worker secret:
+
+```powershell
+npx wrangler secret put OPENAI_API_KEY
+```
+
+## Docker API
+
+The same TypeScript scoring stack runs in Docker for self-hosted demos:
 
 ```powershell
 Copy-Item .env.example .env
-# Edit .env and add OPENAI_API_KEY when you want OpenAI OCR/image analysis.
 docker compose up --build
 ```
 
-Ping the container:
-
-```powershell
-Invoke-RestMethod http://localhost:5072/health
-```
-
-Test the assessment endpoint:
+Test an assessment:
 
 ```powershell
 Invoke-RestMethod http://localhost:5072/v1/assess `
   -Method Post `
   -ContentType "application/json" `
   -Body '{"client":"chrome","url":"https://example.com","visibleText":"Act now to claim your prize","extractedLinks":[{"href":"https://bit.ly/example","source":"dom"}]}'
-```
-
-For production, store the key as a Cloudflare Worker secret:
-
-```powershell
-npx wrangler secret put OPENAI_API_KEY
 ```
 
 ## API Contract
@@ -92,7 +156,7 @@ Example request:
 
 ```json
 {
-  "client": "chrome",
+  "client": "android",
   "url": "https://example.com/news/story",
   "pageTitle": "Local flood warning issued",
   "visibleText": "The local council published evacuation routes...",
@@ -110,7 +174,6 @@ Example request:
     "dataUrl": "data:image/png;base64,..."
   },
   "consentToStoreEvidence": false,
-  "consentLabel": "optional-training-qa-v1",
   "locale": "en-AU",
   "contentType": "article"
 }
@@ -138,17 +201,13 @@ Example response:
 }
 ```
 
-High-risk example explanation:
+## Design Direction
 
-```text
-Risk: High
-Label: Suspicious
+TrustLens uses a calm safety palette:
 
-Why:
-1. The post asks you to act urgently.
-2. The link does not match the official website.
-3. No trusted source confirms this claim.
+- Navy ink: `#20283a`
+- Teal signal: `#66b7b8`
+- Lavender verification accent: `#aaa2e6`
+- Warm paper: `#fbfaf7`
 
-Advice:
-Do not click the link. Ask a family member or check the official website.
-```
+The landing page carries that look into the Docker-hosted TypeScript server and links directly to the public APK build path.

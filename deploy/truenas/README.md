@@ -7,6 +7,7 @@ This deployment runs the TrustLens backend API as a Docker container on TrueNAS.
 - Hostname: `trustlens.z2hs.au`
 - TrueNAS UI / server IP: `http://172.20.20.251/`
 - TrueNAS port: `5072`
+- Public homepage: `https://trustlens.z2hs.au/`
 - Public API endpoint: `https://trustlens.z2hs.au/v1/assess`
 - Local container endpoint: `http://172.20.20.251:5072/v1/assess`
 
@@ -78,6 +79,7 @@ Use HTTPS at the reverse proxy layer. Keep the container on plain HTTP internall
 
 Reverse proxy requirements:
 
+- Preserve `/` for the TrustLens landing page.
 - Preserve the request path, for example `/v1/assess` must reach `/v1/assess`.
 - Allow `GET`, `POST`, and `OPTIONS`.
 - Forward the `Authorization` header for protected evidence endpoints.

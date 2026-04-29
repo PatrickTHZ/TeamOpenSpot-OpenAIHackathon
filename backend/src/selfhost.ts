@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { API_VERSION, assessSchema, publicRuntimeConfig } from "./api-metadata.ts";
+import { landingPageHtml } from "./landing-page.ts";
 import {
   assessCredibility,
   heuristicAssessment,
@@ -82,12 +83,17 @@ const server = createServer(async (request, response) => {
     }
 
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+    if (request.method === "GET" && url.pathname === "/") {
+      writeHtml(response, 200, landingPageHtml());
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       writeJson(response, 200, {
         ok: true,
         service: "trustlens-backend",
         apiVersion: API_VERSION,
-        endpoints: ["/v1/assess", "/v1/schema", "/v1/evidence"],
+        endpoints: ["/", "/v1/assess", "/v1/schema", "/v1/evidence"],
         config: publicRuntimeConfig(env)
       }, requestId);
       return;
@@ -224,6 +230,15 @@ function writeJson(response: ServerResponse, status: number, value: unknown, req
     "Cache-Control": "no-store"
   });
   response.end(value === null ? "" : JSON.stringify(value));
+}
+
+function writeHtml(response: ServerResponse, status: number, value: string): void {
+  response.writeHead(status, {
+    ...corsHeaders,
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "public, max-age=300"
+  });
+  response.end(value);
 }
 
 function writeBytes(response: ServerResponse, status: number, value: Buffer, contentType: string): void {
