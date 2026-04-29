@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
 import { API_VERSION, assessSchema, publicRuntimeConfig } from "./api-metadata.ts";
 import { landingPageHtml } from "./landing-page.ts";
 import {
@@ -72,6 +73,11 @@ const env: SelfHostEnv = {
   ASSESSMENT_LOG_INPUT: process.env.ASSESSMENT_LOG_INPUT
 };
 
+const assetContentTypes: Record<string, string> = {
+  "/assets/trustlens-scan-flow.gif": "image/gif",
+  "/assets/trustlens-explain-panel.gif": "image/gif"
+};
+
 const server = createServer(async (request, response) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -85,6 +91,16 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
     if (request.method === "GET" && url.pathname === "/") {
       writeHtml(response, 200, landingPageHtml());
+      return;
+    }
+
+    if (request.method === "GET" && assetContentTypes[url.pathname]) {
+      const asset = await readPublicAsset(url.pathname);
+      if (!asset) {
+        writeJson(response, 404, { error: "Asset not found", requestId }, requestId);
+        return;
+      }
+      writeBytes(response, 200, asset, assetContentTypes[url.pathname], "public, max-age=86400");
       return;
     }
 
@@ -241,11 +257,34 @@ function writeHtml(response: ServerResponse, status: number, value: string): voi
   response.end(value);
 }
 
-function writeBytes(response: ServerResponse, status: number, value: Buffer, contentType: string): void {
+async function readPublicAsset(pathname: string): Promise<Buffer | null> {
+  const fileName = pathname.replace("/assets/", "");
+  const candidates = [
+    new URL(`../../docs/assets/${fileName}`, import.meta.url),
+    new URL(`../docs/assets/${fileName}`, import.meta.url)
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return await readFile(candidate);
+    } catch {
+      // Try the next candidate because local and Docker layouts differ.
+    }
+  }
+  return null;
+}
+
+function writeBytes(
+  response: ServerResponse,
+  status: number,
+  value: Buffer,
+  contentType: string,
+  cacheControl = "private, no-store"
+): void {
   response.writeHead(status, {
     ...corsHeaders,
     "Content-Type": contentType,
-    "Cache-Control": "private, no-store"
+    "Cache-Control": cacheControl
   });
   response.end(value);
 }

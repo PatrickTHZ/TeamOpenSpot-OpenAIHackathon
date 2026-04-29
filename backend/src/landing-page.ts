@@ -1,7 +1,6 @@
 const githubRepoUrl = "https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon";
 const publicHomeUrl = "https://trustlens.z2hs.au";
 const apkDownloadUrl = `${githubRepoUrl}/releases/latest/download/trustlens-debug.apk`;
-const androidBuildUrl = `${githubRepoUrl}/actions/workflows/android-apk.yml`;
 
 export function landingPageHtml(): string {
   return `<!doctype html>
@@ -364,6 +363,72 @@ export function landingPageHtml(): string {
         line-height: 1.62;
       }
 
+      .demo-band {
+        padding: 76px 0 88px;
+        background: rgba(255, 255, 255, 0.48);
+        border-top: 1px solid var(--line);
+      }
+
+      .demo-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.72fr) minmax(280px, 0.28fr);
+        gap: 32px;
+        align-items: end;
+        margin-bottom: 34px;
+      }
+
+      .demo-head h2 {
+        margin: 0;
+        color: var(--ink);
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 1;
+      }
+
+      .demo-head p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 17px;
+        line-height: 1.58;
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+      }
+
+      .demo-card {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 18px 52px rgba(32, 40, 58, 0.08);
+      }
+
+      .demo-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .demo-copy {
+        padding: 18px 18px 20px;
+      }
+
+      .demo-copy h3 {
+        margin: 0 0 8px;
+        color: var(--ink);
+        font-size: 20px;
+        line-height: 1.2;
+      }
+
+      .demo-copy p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
       @media (max-width: 860px) {
         .nav {
           width: calc(100% - 28px);
@@ -399,6 +464,11 @@ export function landingPageHtml(): string {
 
         .proof,
         .sections {
+          grid-template-columns: 1fr;
+        }
+
+        .demo-head,
+        .demo-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -461,7 +531,7 @@ export function landingPageHtml(): string {
           </p>
           <div class="actions">
             <a class="button" href="${apkDownloadUrl}">Download Android APK</a>
-            <a class="button secondary" href="${androidBuildUrl}">View GitHub build</a>
+            <a class="button secondary" href="${githubRepoUrl}">View GitHub repo</a>
           </div>
           <div class="proof" aria-label="TrustLens highlights">
             <div><strong>Android-first</strong>Accessibility-service prototype for capturing visible feed context.</div>
@@ -510,6 +580,31 @@ export function landingPageHtml(): string {
         <div class="section">
           <h2>Runs where teams demo</h2>
           <p>The API ships as a Cloudflare Worker or as a Docker container with optional OCR and evidence storage.</p>
+        </div>
+      </section>
+
+      <section class="demo-band">
+        <div class="shell">
+          <div class="demo-head">
+            <h2>The app flow in motion.</h2>
+            <p>These prototype GIFs show the expected Android interaction: passive while scrolling, active after a pause, and plain-spoken when the user asks why.</p>
+          </div>
+          <div class="demo-grid">
+            <article class="demo-card">
+              <img src="/assets/trustlens-scan-flow.gif" alt="Mock TrustLens app scanning a visible feed after the user pauses." />
+              <div class="demo-copy">
+                <h3>Pause-to-scan bubble</h3>
+                <p>TrustLens waits during scrolling, then checks the visible post context and surfaces a compact risk label.</p>
+              </div>
+            </article>
+            <article class="demo-card">
+              <img src="/assets/trustlens-explain-panel.gif" alt="Mock TrustLens app showing a tapped explanation panel with risk reasons." />
+              <div class="demo-copy">
+                <h3>Tap for plain reasons</h3>
+                <p>The detail view explains link risk, urgency, missing evidence, and the safest next action before sharing.</p>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
     </main>

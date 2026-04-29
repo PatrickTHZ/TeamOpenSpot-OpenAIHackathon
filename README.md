@@ -2,13 +2,33 @@
 
 TrustLens is an Android-first credibility companion for social feeds, screenshots, links, and fast-moving claims. It waits for the user to pause, captures the visible context they are looking at, and returns a plain-language risk label before a scam, hoax, or panic-share gets a chance to travel.
 
-[Open the homepage](https://trustlens.z2hs.au) · [Download the Android APK](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/releases/latest/download/trustlens-debug.apk) · [View the public GitHub build](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/actions/workflows/android-apk.yml) · [Open the repository](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon)
+[Open the homepage](https://trustlens.z2hs.au) · [Download the Android APK](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/releases/latest/download/trustlens-debug.apk) · [Open the repository](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon)
 
 ## Why It Matters
 
 TrustLens is built for the moment when someone sees an urgent post, a miracle product, a suspicious link, or a screenshot that looks official enough to share. Instead of pretending to be an all-knowing fact checker, it looks at the evidence the user can actually see and explains what is supported, what is missing, and what deserves caution.
 
 The product is intentionally careful: it produces a credibility estimate, not a final verdict. Missing public evidence is reported as missing instead of invented.
+
+## Mock App Flow
+
+![TrustLens scan flow mock GIF](docs/assets/trustlens-scan-flow.gif)
+
+TrustLens stays quiet while the user scrolls. When the user pauses, the floating bubble scans the visible post, screenshot, and link context, then returns a compact risk label such as `Likely safe`, `Needs checking`, `Suspicious`, or `Cannot verify`.
+
+![TrustLens explanation panel mock GIF](docs/assets/trustlens-explain-panel.gif)
+
+Tapping the bubble opens the explanation view. It highlights the strongest visible signals, such as shortened links, urgent wording, missing sources, suspicious account context, OCR text, and the safest next action before sharing.
+
+## Features
+
+- Pause-aware capture: avoids constant scanning while the user is actively scrolling.
+- Visible-evidence scoring: uses captured text, OCR hints, source links, page titles, and account signals.
+- Plain-language risk labels: turns the assessment into a quick label and human-readable reasons.
+- Link and source checks: flags shortened links, mismatched domains, missing official sources, and suspicious source cues.
+- Screenshot-aware analysis: OCR text can feed the same scam, claim, and source checks as normal post text.
+- Docker self-hosting: the TypeScript API can run behind `trustlens.z2hs.au` with `/` as the homepage and `/v1/assess` as the API.
+- Android APK workflow: GitHub Actions builds the Android prototype and publishes `trustlens-debug.apk`.
 
 ## What Is Included
 
@@ -19,6 +39,7 @@ The product is intentionally careful: it produces a credibility estimate, not a 
 - `deploy/truenas/` - TrueNAS-ready Docker Compose deployment for `trustlens.z2hs.au`.
 - `.github/workflows/android-apk.yml` - Android SDK build that publishes `trustlens-debug.apk` as a workflow artifact and attaches it to tagged releases.
 - `.github/workflows/docker-image.yml` - Docker image build for GHCR.
+- `docs/assets/` - mock TrustLens app GIFs used by the README and homepage.
 
 ## Try The Landing Page
 

@@ -10,6 +10,7 @@ RUN npm ci --omit=optional
 COPY backend/tsconfig.json backend/tsconfig.node.json ./
 COPY backend/src ./src
 COPY shared /shared
+COPY docs/assets ./docs/assets
 
 ENV HOST=0.0.0.0
 ENV PORT=5072
