@@ -558,12 +558,29 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     score -= 12;
   }
 
+  if (isBenignSearchResultViewer(request, lowerText, signals)) {
+    evidenceFor.unshift(
+      "This appears to be a search result or image viewer page, not an original post making a claim.",
+      "The visible result names an education or institutional source."
+    );
+    score = Math.max(score, 84);
+  }
+
+  const finalMissingSignals = isBenignSearchResultViewer(request, lowerText, signals)
+    ? missingSignals.filter(
+        (signal) =>
+          !signal.includes("account age") &&
+          !signal.includes("profile history") &&
+          !signal.includes("picture checks are limited")
+      )
+    : missingSignals;
+
   return {
     score: clampScore(score),
     confidence: confidenceFor(text, links, request, signals),
     evidenceFor: dedupe(evidenceFor).slice(0, 6),
     evidenceAgainst: dedupe(evidenceAgainst).slice(0, 6),
-    missingSignals: dedupe(missingSignals).slice(0, 6),
+    missingSignals: dedupe(finalMissingSignals).slice(0, 6),
     claimDetails: dedupeClaimDetails(claimDetails).slice(0, 6),
     signals,
     accountCredibility: account.accountCredibility
@@ -1177,6 +1194,53 @@ function isGeneralNutritionWellnessAdvice(text: string): boolean {
   return discussesCramps && discussesFoodOrHydration && !dangerousSpecificClaim;
 }
 
+function isBenignSearchResultViewer(
+  request: CredibilityAssessRequest,
+  text: string,
+  signals: RiskSignal[]
+): boolean {
+  if (!isSearchResultViewer(request, text)) return false;
+  if (isHighImpactClaim(text) || detectRapidWeightLossClaim(text)) return false;
+  if (signals.some((signal) => signal.weight >= 10 && signal.category !== "source-credibility")) return false;
+  return hasInstitutionalSearchResultContext(request, text);
+}
+
+function isSearchResultViewer(request: CredibilityAssessRequest, text: string): boolean {
+  const host = request.url ? getDomain(request.url) : null;
+  const path = request.url ? pathAndQuery(request.url) : "";
+  const searchHost =
+    host === "google.com" ||
+    host?.endsWith(".google.com") ||
+    host === "bing.com" ||
+    host?.endsWith(".bing.com") ||
+    host === "duckduckgo.com" ||
+    host?.endsWith(".duckduckgo.com");
+  const searchPath = /\/search|tbm=isch|[?&]q=|\/images\/search/.test(path);
+  const viewerText =
+    /google\.com\/search|images may be subject to copyright|learn more|visit\s+share\s+save|search by image|google lens|bing images/.test(
+      text
+    );
+  return Boolean((searchHost && searchPath) || viewerText);
+}
+
+function hasInstitutionalSearchResultContext(request: CredibilityAssessRequest, text: string): boolean {
+  return Boolean(
+    /\b(university|universities|college|school|faculty|campus|uts|edu\.au|\.edu)\b/.test(text) ||
+      /\b(university|universities|college|school|faculty|campus|uts)\b/i.test(
+        `${request.authorName || ""} ${request.pageTitle || ""} ${request.imageCrop?.description || ""}`
+      )
+  );
+}
+
+function pathAndQuery(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.pathname}${url.search}`.toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
+}
+
 function buildSummary(score: number, analysis: FastRiskAnalysis): string {
   const primaryUnsupportedClaim = analysis.claimDetails.find(
     (detail) => detail.status === "unsupported" && detail.severity === "high"
@@ -1724,8 +1788,12 @@ function detectRequestedActions(
   const text = allText(request).toLowerCase();
   const actions: RequestedAction[] = [];
   const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
+  const benignSearchResult = isBenignSearchResultViewer(request, text, analysis.signals);
 
-  if (/\b(click|tap|open|visit)\b|follow the link|link below/.test(text) || request.extractedLinks?.length) {
+  if (
+    !benignSearchResult &&
+    (/\b(click|tap|open|visit)\b|follow the link|link below/.test(text) || request.extractedLinks?.length)
+  ) {
     actions.push({
       action: "click_link",
       risk: highRisk ? "high" : "medium",

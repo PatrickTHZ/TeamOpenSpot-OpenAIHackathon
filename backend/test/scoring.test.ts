@@ -406,6 +406,30 @@ describe("heuristicAssessment", () => {
     expect(result.evidenceAgainst.join(" ")).not.toContain("high-impact claim");
   });
 
+  it("treats benign Google Images university results as low risk browsing context", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      url: "https://www.google.com/search?tbm=isch&q=University+of+Technology+Sydney+Universities+Australia",
+      authorName: "Universities Australia",
+      visibleText:
+        "google.com/search? Universities Australia University of Technology Sydney - Universities Australia Images may be subject to copyright. Learn more Visit Share Save UTS International Students UTS Faculties and Schools UTS",
+      screenshotOcrText:
+        "google.com/search? Universities Australia University of Technology Sydney - Universities Australia Images may be subject to copyright. Learn more Visit Share Save",
+      imageCrop: {
+        description:
+          "Google Images viewer showing a UTS building. Source label says Universities Australia and title says University of Technology Sydney - Universities Australia."
+      },
+      contentType: "unknown"
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(80);
+    expect(result.riskLevel).toBe("low");
+    expect(result.label).toBe("Likely safe");
+    expect(result.evidenceFor.join(" ")).toContain("search result or image viewer");
+    expect(result.requestedActions).toBeUndefined();
+    expect(result.evidenceAgainst).toEqual([]);
+  });
+
   it("explains unsupported rapid single-food weight-loss claims specifically", () => {
     const result = heuristicAssessment({
       client: "chrome",
