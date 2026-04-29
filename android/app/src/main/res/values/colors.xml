@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="trust_ink">#182235</color>
+    <color name="trust_muted">#697589</color>
+    <color name="trust_teal">#63B5B0</color>
+    <color name="trust_violet">#928BDD</color>
+    <color name="trust_green">#2E9D57</color>
+    <color name="trust_yellow">#D6A018</color>
+    <color name="trust_red">#D14B48</color>
+    <color name="trust_surface">#FFFCF6</color>
+    <color name="trust_panel">#FFFFFF</color>
+</resources>

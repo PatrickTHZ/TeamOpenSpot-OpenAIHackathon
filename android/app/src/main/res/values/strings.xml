@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TrustLens</string>
+    <string name="accessibility_service_label">TrustLens feed helper</string>
+    <string name="accessibility_service_description">TrustLens reads visible post text after you pause scrolling, then shows a simple risk bubble.</string>
+</resources>

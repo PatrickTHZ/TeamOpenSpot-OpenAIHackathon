@@ -16,3 +16,4 @@ build/
 *.apk
 *.aab
 local.properties
+android/.idea/
