@@ -72,7 +72,56 @@ export const credibilityResponseJsonSchema = {
       },
       maxItems: 6
     },
-    recommendedAction: { type: "string", minLength: 1 }
+    recommendedAction: { type: "string", minLength: 1 },
+    reverseImageSearch: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "summary", "credibleMatches", "riskyMatches"],
+      properties: {
+        status: { type: "string", enum: ["checked", "unavailable"] },
+        summary: { type: "string" },
+        credibleMatches: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["url"],
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              sourceName: { type: "string" },
+              sourceType: {
+                type: "string",
+                enum: ["official", "education", "news", "medical", "government", "social", "other"]
+              },
+              similarity: { type: "string", enum: ["exact", "near", "related"] },
+              context: { type: "string" }
+            }
+          },
+          maxItems: 5
+        },
+        riskyMatches: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["url"],
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              sourceName: { type: "string" },
+              sourceType: {
+                type: "string",
+                enum: ["official", "education", "news", "medical", "government", "social", "other"]
+              },
+              similarity: { type: "string", enum: ["exact", "near", "related"] },
+              context: { type: "string" }
+            }
+          },
+          maxItems: 5
+        }
+      }
+    }
   }
 } as const;
 

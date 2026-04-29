@@ -267,6 +267,8 @@ function logAssessmentResult(input: {
       linkCount: request.extractedLinks?.length || 0,
       hasImageData: Boolean(request.imageCrop?.dataUrl),
       hasImageDescription: Boolean(request.imageCrop?.description),
+      reverseImageSearch: request.reverseImageSearch?.status || "not_supplied",
+      reverseImageMatchCount: request.reverseImageSearch?.matches?.length || 0,
       accountContext: Boolean(request.accountContext)
     },
     result: {
@@ -300,7 +302,8 @@ function logAssessmentResult(input: {
         missingSignals: assessment.missingSignals,
         riskSignals: assessment.riskSignals,
         requestedActions: assessment.requestedActions,
-        accountCredibility: assessment.accountCredibility
+        accountCredibility: assessment.accountCredibility,
+        reverseImageSearch: assessment.reverseImageSearch
       })
     );
     return;
@@ -324,7 +327,8 @@ function logAssessmentResult(input: {
         category: signal.category,
         severity: signal.severity,
         message: signal.message
-      }))
+      })),
+      reverseImageSearch: assessment.reverseImageSearch
     })
   );
 }
@@ -362,6 +366,22 @@ function buildInputLog(
           dataUrlBytesApprox: request.imageCrop.dataUrl ? Math.round(request.imageCrop.dataUrl.length * 0.75) : 0,
           description: textForLog(request.imageCrop.description, limit),
           crop: request.imageCrop.crop
+      }
+      : undefined,
+    reverseImageSearch: request.reverseImageSearch
+      ? {
+          status: request.reverseImageSearch.status,
+          provider: request.reverseImageSearch.provider,
+          summary: textForLog(request.reverseImageSearch.summary, limit),
+          matches: request.reverseImageSearch.matches?.map((match) => ({
+            title: textForLog(match.title, limit),
+            url: match.url,
+            host: safeHost(match.url),
+            sourceName: textForLog(match.sourceName, limit),
+            sourceType: match.sourceType,
+            similarity: match.similarity,
+            context: textForLog(match.context, limit)
+          }))
         }
       : undefined,
     accountContext: request.accountContext

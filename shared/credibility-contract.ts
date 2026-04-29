@@ -22,6 +22,7 @@ export interface CredibilityAssessRequest {
   screenshotOcrText?: string;
   extractedLinks?: LinkEvidence[];
   imageCrop?: ImageCropEvidence;
+  reverseImageSearch?: ReverseImageSearchEvidence;
   consentToStoreEvidence?: boolean;
   consentLabel?: string;
   verificationMode?: "fast" | "web";
@@ -46,6 +47,22 @@ export interface ImageCropEvidence {
   };
 }
 
+export interface ReverseImageSearchEvidence {
+  status: "checked" | "unavailable";
+  provider?: "google_lens" | "bing_visual_search" | "tineye" | "serpapi" | "manual" | "other";
+  summary?: string;
+  matches?: ReverseImageMatch[];
+}
+
+export interface ReverseImageMatch {
+  title?: string;
+  url: string;
+  sourceName?: string;
+  sourceType?: "official" | "education" | "news" | "medical" | "government" | "social" | "other";
+  similarity?: "exact" | "near" | "related";
+  context?: string;
+}
+
 export interface CredibilityAssessResponse {
   score: number;
   band: CredibilityBand;
@@ -64,6 +81,7 @@ export interface CredibilityAssessResponse {
   requestedActions?: RequestedAction[];
   accountCredibility?: AccountCredibility;
   analysisVersion?: string;
+  reverseImageSearch?: ReverseImageSearchResult;
   webVerification?: WebVerification;
   evidenceId?: string;
   storedEvidenceUrl?: string;
@@ -76,7 +94,8 @@ export interface PublicRiskSignal {
     | "source-credibility"
     | "link-mismatch"
     | "claim-verification"
-    | "ai-image-suspicion";
+    | "ai-image-suspicion"
+    | "image-provenance";
   severity: "low" | "medium" | "high";
   message: string;
 }
@@ -139,6 +158,13 @@ export interface WebVerification {
   summary: string;
   claims: VerifiedClaim[];
   sources: VerificationSource[];
+}
+
+export interface ReverseImageSearchResult {
+  status: "checked" | "unavailable";
+  summary: string;
+  credibleMatches: ReverseImageMatch[];
+  riskyMatches: ReverseImageMatch[];
 }
 
 export interface VerifiedClaim {
@@ -236,7 +262,8 @@ export const credibilityResponseJsonSchema = {
               "source-credibility",
               "link-mismatch",
               "claim-verification",
-              "ai-image-suspicion"
+              "ai-image-suspicion",
+              "image-provenance"
             ]
           },
           severity: { type: "string", enum: ["low", "medium", "high"] },
@@ -284,6 +311,55 @@ export const credibilityResponseJsonSchema = {
       }
     },
     analysisVersion: { type: "string" },
+    reverseImageSearch: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "summary", "credibleMatches", "riskyMatches"],
+      properties: {
+        status: { type: "string", enum: ["checked", "unavailable"] },
+        summary: { type: "string" },
+        credibleMatches: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["url"],
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              sourceName: { type: "string" },
+              sourceType: {
+                type: "string",
+                enum: ["official", "education", "news", "medical", "government", "social", "other"]
+              },
+              similarity: { type: "string", enum: ["exact", "near", "related"] },
+              context: { type: "string" }
+            }
+          },
+          maxItems: 5
+        },
+        riskyMatches: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["url"],
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              sourceName: { type: "string" },
+              sourceType: {
+                type: "string",
+                enum: ["official", "education", "news", "medical", "government", "social", "other"]
+              },
+              similarity: { type: "string", enum: ["exact", "near", "related"] },
+              context: { type: "string" }
+            }
+          },
+          maxItems: 5
+        }
+      }
+    },
     webVerification: {
       type: "object",
       additionalProperties: false,

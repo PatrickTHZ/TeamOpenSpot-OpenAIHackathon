@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 
-export const API_VERSION = "2026-04-29.4";
+export const API_VERSION = "2026-04-29.5";
 
 export function publicRuntimeConfig(
   env: Pick<
@@ -52,6 +52,8 @@ export function assessSchema() {
       extractedLinks: "Array of { text?, href, source? }",
       imageCrop:
         "Optional { dataUrl?, mediaType?, description?, crop? }. Use dataUrl or description as evidence; crop coordinates alone are not enough.",
+      reverseImageSearch:
+        "Optional provider results: { status, provider?, summary?, matches?: [{ title?, url, sourceName?, sourceType?, similarity?, context? }] }. Exact/near matches from credible sources can improve image provenance.",
       contentType: "post | article | reel | unknown",
       locale: "BCP-47 locale hint, for example en-AU",
       consentToStoreEvidence: "true only when user agrees to training/QA storage",
@@ -76,6 +78,7 @@ export function assessSchema() {
       requestedActions: "Detected actions the content asks the user to take",
       accountCredibility: "Optional visible account-history credibility summary",
       analysisVersion: "Version of deterministic risk rules",
+      reverseImageSearch: "Optional image provenance result, including credible and risky visual matches",
       webVerification: "Optional web source checking result when requested and enabled",
       evidenceId: "Only present when opt-in storage succeeds",
       storedEvidenceUrl: "Only present when opt-in storage succeeds"

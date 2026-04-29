@@ -65,6 +65,30 @@ describe("validateAssessRequest", () => {
     expect(request.verificationMode).toBe("web");
   });
 
+  it("accepts reverse image search provenance evidence", () => {
+    const request = validateAssessRequest({
+      client: "android",
+      reverseImageSearch: {
+        status: "checked",
+        provider: "google_lens",
+        summary: "Found matching university image results.",
+        matches: [
+          {
+            title: "University of Technology Sydney",
+            url: "https://www.uts.edu.au/about/campus",
+            sourceName: "UTS",
+            sourceType: "education",
+            similarity: "exact",
+            context: "Official campus page"
+          }
+        ]
+      }
+    });
+
+    expect(request.reverseImageSearch?.status).toBe("checked");
+    expect(request.reverseImageSearch?.matches?.[0]?.sourceType).toBe("education");
+  });
+
   it("accepts the Android accessibility capture payload shape", () => {
     const request = validateAssessRequest({
       client: "android",
@@ -428,6 +452,67 @@ describe("heuristicAssessment", () => {
     expect(result.evidenceFor.join(" ")).toContain("search result or image viewer");
     expect(result.requestedActions).toBeUndefined();
     expect(result.evidenceAgainst).toEqual([]);
+  });
+
+  it("uses credible reverse image matches to lift image provenance", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      visibleText: "University of Technology Sydney campus building.",
+      imageCrop: {
+        description: "Photo of a UTS campus building shown in a mobile browser."
+      },
+      reverseImageSearch: {
+        status: "checked",
+        provider: "google_lens",
+        summary: "Exact visual match found on official university and education sources.",
+        matches: [
+          {
+            title: "UTS campus",
+            url: "https://www.uts.edu.au/about/campus",
+            sourceName: "University of Technology Sydney",
+            sourceType: "education",
+            similarity: "exact",
+            context: "Official UTS page with the same building image."
+          }
+        ]
+      }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(80);
+    expect(result.riskLevel).toBe("low");
+    expect(result.evidenceFor.join(" ")).toContain("Reverse image search found an exact image match");
+    expect(result.reverseImageSearch?.credibleMatches[0]?.sourceName).toBe("University of Technology Sydney");
+    expect(result.riskSignals?.some((signal) => signal.category === "image-provenance")).toBe(true);
+  });
+
+  it("does not let reverse image matches override unsupported high-risk claims", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText:
+        "Some seniors are eating 400g of spinach a day and losing up to 4kg in 30 days. No pills, no gym.",
+      imageCrop: {
+        description: "Infographic about a spinach routine for senior weight loss."
+      },
+      reverseImageSearch: {
+        status: "checked",
+        provider: "manual",
+        matches: [
+          {
+            title: "Spinach photo",
+            url: "https://www.health.gov.au/resources/healthy-eating",
+            sourceName: "Australian Government",
+            sourceType: "government",
+            similarity: "near",
+            context: "Generic spinach image, not clinical evidence for this routine."
+          }
+        ]
+      }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.score).toBeLessThan(50);
+    expect(result.evidenceAgainst.join(" ")).toContain("specific rapid weight loss");
+    expect(result.reverseImageSearch?.credibleMatches).toHaveLength(1);
   });
 
   it("explains unsupported rapid single-food weight-loss claims specifically", () => {

@@ -10,13 +10,15 @@ import type {
   AccountCredibility,
   ClaimDetail,
   PublicRiskSignal,
+  ReverseImageMatch,
+  ReverseImageSearchResult,
   RequestedAction,
   WebVerification
 } from "../../shared/credibility-contract.ts";
 import type { Env } from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const ANALYSIS_VERSION = "risk-rules-2026-04-29.4";
+const ANALYSIS_VERSION = "risk-rules-2026-04-29.5";
 const MAX_TEXT_LENGTH = 6000;
 const MAX_LINKS = 16;
 const MAX_ACCOUNT_RECENT_POSTS = 5;
@@ -110,7 +112,8 @@ interface RiskSignal {
     | "source-credibility"
     | "link-mismatch"
     | "claim-verification"
-    | "ai-image-suspicion";
+    | "ai-image-suspicion"
+    | "image-provenance";
   weight: number;
   message: string;
 }
@@ -124,6 +127,7 @@ interface FastRiskAnalysis {
   claimDetails: ClaimDetail[];
   signals: RiskSignal[];
   accountCredibility?: AccountCredibility;
+  reverseImageSearch?: ReverseImageSearchResult;
 }
 
 export function validateAssessRequest(value: unknown): CredibilityAssessRequest {
@@ -175,6 +179,7 @@ export function validateAssessRequest(value: unknown): CredibilityAssessRequest 
   request.accountContext = parseAccountContext(input.accountContext);
   request.extractedLinks = parseLinkEvidence(input.extractedLinks);
   request.imageCrop = parseImageCropEvidence(input.imageCrop);
+  request.reverseImageSearch = parseReverseImageSearchEvidence(input.reverseImageSearch);
   if (input.consentToStoreEvidence === true) {
     request.consentToStoreEvidence = true;
   }
@@ -202,6 +207,7 @@ export function hasUsefulEvidence(request: CredibilityAssessRequest): boolean {
       request.extractedLinks?.length ||
       request.imageCrop?.dataUrl ||
       request.imageCrop?.description ||
+      request.reverseImageSearch?.matches?.length ||
       request.url?.trim()
   );
 }
@@ -242,6 +248,7 @@ export function normalizeAssessment(raw: CredibilityAssessResponse): Credibility
     riskSignals: sanitizeRiskSignals(raw.riskSignals),
     requestedActions: sanitizeRequestedActions(raw.requestedActions),
     accountCredibility: sanitizeAccountCredibility(raw.accountCredibility),
+    reverseImageSearch: sanitizeReverseImageSearchResult(raw.reverseImageSearch),
     analysisVersion: raw.analysisVersion?.trim() || ANALYSIS_VERSION
   };
 }
@@ -271,6 +278,7 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
     riskSignals: publicRiskSignals(analysis.signals),
     requestedActions: detectRequestedActions(request, analysis),
     accountCredibility: analysis.accountCredibility,
+    reverseImageSearch: analysis.reverseImageSearch,
     analysisVersion: ANALYSIS_VERSION
   });
 }
@@ -333,7 +341,7 @@ export async function assessCredibility(
         instructions: [
           "You are a fast credibility risk assistant for elderly users.",
           "Your job is to estimate whether visible social media or web content is low, medium, high, or unknown risk.",
-          "Use only the supplied evidence: visible text, selected text, OCR text, extracted links, source URL, author/account name, visible profile signals, account context, and optional image description or image crop.",
+          "Use only the supplied evidence: visible text, selected text, OCR text, extracted links, source URL, author/account name, visible profile signals, account context, optional image description or image crop, and optional reverse image search matches.",
           "Do not browse the web. Do not invent account age, verification status, source reputation, image facts, or hidden context.",
           "Start from the deterministic baseline assessment and improve it only when supplied evidence supports the change.",
           "Check exactly these categories: scam language, account credibility, source credibility, link mismatch, claim verification, and AI-image suspicion.",
@@ -343,6 +351,7 @@ export async function assessCredibility(
           "Link mismatch means visible link text differs from the real destination, or links use shorteners, lookalike domains, login/verify/prize wording, IP addresses, punycode, or unrelated domains.",
           "Claim verification means checking whether important claims are supported by the provided source/domain/profile/text evidence. Health, finance, emergency, legal, police, tax, government, recall, and safety claims need official or established source evidence.",
           "AI-image suspicion means checking OCR or image description for AI-generated, synthetic, edited, manipulated, deepfake, before/after transformation, sensational image claims, or staged/demo labels.",
+          "Reverse image search matches can support image provenance when exact or near matches come from official, education, government, medical, or reputable news sources. They must not override unsupported health, finance, emergency, or scam claims.",
           "If evidence is thin, use Cannot verify or Needs checking rather than guessing.",
           "Keep the explanation plain, calm, and short. Explain the top 1-3 reasons without technical jargon or shaming the user.",
           "Give a concrete elderly-friendly next step, such as do not click, open the official app or website yourself, call a trusted number, or ask someone you trust.",
@@ -548,6 +557,17 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   missingSignals.push(...image.missingSignals);
   signals.push(...image.signals);
 
+  const reverseImage = assessReverseImageSearch(request, lowerText);
+  score += reverseImage.scoreDelta;
+  if (reverseImage.credibleMatchFound) {
+    evidenceFor.unshift(...reverseImage.evidenceFor);
+  } else {
+    evidenceFor.push(...reverseImage.evidenceFor);
+  }
+  evidenceAgainst.push(...reverseImage.evidenceAgainst);
+  missingSignals.push(...reverseImage.missingSignals);
+  signals.push(...reverseImage.signals);
+
   if (request.contentType === "reel") {
     missingSignals.push("Video and audio content were not fully analyzed in this prototype.");
     score -= 6;
@@ -566,12 +586,18 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     score = Math.max(score, 84);
   }
 
-  const finalMissingSignals = isBenignSearchResultViewer(request, lowerText, signals)
+  if (reverseImage.credibleMatchFound && !hasStrongContradictingRisk(signals, lowerText)) {
+    score = Math.max(score, 82);
+  }
+
+  const hasCredibleReverseMatch = reverseImage.credibleMatchFound;
+  const finalMissingSignals = isBenignSearchResultViewer(request, lowerText, signals) || hasCredibleReverseMatch
     ? missingSignals.filter(
         (signal) =>
           !signal.includes("account age") &&
           !signal.includes("profile history") &&
-          !signal.includes("picture checks are limited")
+          !signal.includes("picture checks are limited") &&
+          !signal.includes("No source link is visible")
       )
     : missingSignals;
 
@@ -583,7 +609,8 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     missingSignals: dedupe(finalMissingSignals).slice(0, 6),
     claimDetails: dedupeClaimDetails(claimDetails).slice(0, 6),
     signals,
-    accountCredibility: account.accountCredibility
+    accountCredibility: account.accountCredibility,
+    reverseImageSearch: reverseImage.result
   };
 }
 
@@ -1112,6 +1139,130 @@ function assessImageSuspicion(
   return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
 }
 
+function assessReverseImageSearch(request: CredibilityAssessRequest, text: string): {
+  scoreDelta: number;
+  evidenceFor: string[];
+  evidenceAgainst: string[];
+  missingSignals: string[];
+  signals: RiskSignal[];
+  result?: ReverseImageSearchResult;
+  credibleMatchFound: boolean;
+} {
+  const evidence = request.reverseImageSearch;
+  const evidenceFor: string[] = [];
+  const evidenceAgainst: string[] = [];
+  const missingSignals: string[] = [];
+  const signals: RiskSignal[] = [];
+
+  if (!evidence) {
+    return { scoreDelta: 0, evidenceFor, evidenceAgainst, missingSignals, signals, credibleMatchFound: false };
+  }
+
+  if (evidence.status !== "checked") {
+    const result: ReverseImageSearchResult = {
+      status: "unavailable",
+      summary: evidence.summary || "Reverse image search was unavailable, so image provenance could not be checked.",
+      credibleMatches: [],
+      riskyMatches: []
+    };
+    missingSignals.push("Reverse image search was unavailable, so image provenance could not be checked.");
+    return { scoreDelta: 0, evidenceFor, evidenceAgainst, missingSignals, signals, result, credibleMatchFound: false };
+  }
+
+  const matches = (evidence.matches || []).slice(0, 10);
+  const credibleMatches = matches.filter(isCredibleReverseImageMatch).slice(0, 5);
+  const riskyMatches = matches.filter(isRiskyReverseImageMatch).slice(0, 5);
+  let scoreDelta = 0;
+
+  if (credibleMatches.length) {
+    const best = credibleMatches[0];
+    const source = best.sourceName || domainLabel(best.url) || "a credible source";
+    const similarity = best.similarity === "exact" ? "exact" : best.similarity === "near" ? "near" : "related";
+    const article = similarity === "exact" ? "an" : "a";
+    evidenceFor.push(`Reverse image search found ${article} ${similarity} image match from ${source}.`);
+    signals.push({
+      category: "image-provenance",
+      weight: 6,
+      message: `Reverse image search found credible visual provenance from ${source}.`
+    });
+    scoreDelta += best.similarity === "exact" ? 18 : best.similarity === "near" ? 14 : 8;
+  } else if (matches.length) {
+    missingSignals.push("Reverse image search did not find a clear credible-source match for this image.");
+    scoreDelta -= 2;
+  }
+
+  if (riskyMatches.length && !credibleMatches.length) {
+    evidenceAgainst.push("Reverse image search only found matches from social, suspicious, or unclear sources.");
+    signals.push({
+      category: "image-provenance",
+      weight: 8,
+      message: "Reverse image search did not establish credible image provenance."
+    });
+    scoreDelta -= 6;
+  }
+
+  const supportsImageButNotClaim = credibleMatches.length > 0 && isHighImpactClaim(text);
+  const result: ReverseImageSearchResult = {
+    status: "checked",
+    summary:
+      evidence.summary ||
+      (supportsImageButNotClaim
+        ? "Reverse image search found a credible image match, but that does not verify the post's claim."
+        : credibleMatches.length
+          ? "Reverse image search found credible visual provenance."
+          : "Reverse image search did not find strong credible provenance."),
+    credibleMatches,
+    riskyMatches
+  };
+
+  return {
+    scoreDelta,
+    evidenceFor,
+    evidenceAgainst,
+    missingSignals,
+    signals,
+    result,
+    credibleMatchFound: credibleMatches.length > 0
+  };
+}
+
+function isCredibleReverseImageMatch(match: ReverseImageMatch): boolean {
+  const domain = getDomain(match.url);
+  const sourceType = match.sourceType;
+  const credibleSourceType =
+    sourceType === "official" ||
+    sourceType === "education" ||
+    sourceType === "government" ||
+    sourceType === "medical" ||
+    sourceType === "news";
+  const credibleDomain = Boolean(domain && isTrustedDomain(domain));
+  const strongSimilarity = !match.similarity || match.similarity === "exact" || match.similarity === "near";
+  return strongSimilarity && (credibleSourceType || credibleDomain);
+}
+
+function isRiskyReverseImageMatch(match: ReverseImageMatch): boolean {
+  const domain = getDomain(match.url);
+  const text = `${match.title || ""} ${match.sourceName || ""} ${match.context || ""}`.toLowerCase();
+  return Boolean(
+    match.sourceType === "social" ||
+      (domain && isSuspiciousDomainName(domain)) ||
+      /ai[-\s]?generated|deepfake|synthetic|fake|misleading|scam/.test(text)
+  );
+}
+
+function hasStrongContradictingRisk(signals: RiskSignal[], text: string): boolean {
+  return (
+    isHighImpactClaim(text) ||
+    detectRapidWeightLossClaim(text) !== null ||
+    signals.some(
+      (signal) =>
+        signal.weight >= 14 &&
+        signal.category !== "source-credibility" &&
+        signal.category !== "image-provenance"
+    )
+  );
+}
+
 function isHighImpactClaim(text: string): boolean {
   if (isGeneralNutritionWellnessAdvice(text)) return false;
   return /cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(
@@ -1476,6 +1627,66 @@ function parseImageCropEvidence(value: unknown): CredibilityAssessRequest["image
   return imageCrop.dataUrl || imageCrop.description || imageCrop.crop ? imageCrop : undefined;
 }
 
+function parseReverseImageSearchEvidence(value: unknown): CredibilityAssessRequest["reverseImageSearch"] {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Record<string, unknown>;
+  const status = input.status === "checked" ? "checked" : input.status === "unavailable" ? "unavailable" : undefined;
+  if (!status) return undefined;
+
+  const evidence: NonNullable<CredibilityAssessRequest["reverseImageSearch"]> = { status };
+  if (
+    input.provider === "google_lens" ||
+    input.provider === "bing_visual_search" ||
+    input.provider === "tineye" ||
+    input.provider === "serpapi" ||
+    input.provider === "manual" ||
+    input.provider === "other"
+  ) {
+    evidence.provider = input.provider;
+  }
+  if (typeof input.summary === "string" && input.summary.trim()) {
+    evidence.summary = input.summary.slice(0, 1000);
+  }
+  if (Array.isArray(input.matches)) {
+    evidence.matches = input.matches
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      .map(parseReverseImageMatch)
+      .filter((item): item is ReverseImageMatch => Boolean(item))
+      .slice(0, 10);
+  }
+
+  return evidence.status === "unavailable" || evidence.matches?.length || evidence.summary ? evidence : undefined;
+}
+
+function parseReverseImageMatch(input: Record<string, unknown>): ReverseImageMatch | null {
+  if (typeof input.url !== "string" || !input.url.trim()) return null;
+  const match: ReverseImageMatch = {
+    url: input.url.slice(0, 2048)
+  };
+
+  if (typeof input.title === "string" && input.title.trim()) match.title = input.title.slice(0, 240);
+  if (typeof input.sourceName === "string" && input.sourceName.trim()) {
+    match.sourceName = input.sourceName.slice(0, 160);
+  }
+  if (
+    input.sourceType === "official" ||
+    input.sourceType === "education" ||
+    input.sourceType === "news" ||
+    input.sourceType === "medical" ||
+    input.sourceType === "government" ||
+    input.sourceType === "social" ||
+    input.sourceType === "other"
+  ) {
+    match.sourceType = input.sourceType;
+  }
+  if (input.similarity === "exact" || input.similarity === "near" || input.similarity === "related") {
+    match.similarity = input.similarity;
+  }
+  if (typeof input.context === "string" && input.context.trim()) match.context = input.context.slice(0, 500);
+
+  return match;
+}
+
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -1615,6 +1826,10 @@ function getDomain(link: string): string | null {
   } catch {
     return null;
   }
+}
+
+function domainLabel(link: string): string | null {
+  return getDomain(link);
 }
 
 function rootDomain(domain: string): string {
@@ -1867,7 +2082,8 @@ function sanitizeRiskSignals(signals: PublicRiskSignal[] | undefined): PublicRis
         "source-credibility",
         "link-mismatch",
         "claim-verification",
-        "ai-image-suspicion"
+        "ai-image-suspicion",
+        "image-provenance"
       ].includes(signal.category) &&
       ["low", "medium", "high"].includes(signal.severity)
     )
@@ -1951,6 +2167,55 @@ function sanitizeRequestedActions(actions: RequestedAction[] | undefined): Reque
   return cleaned.length ? cleaned : undefined;
 }
 
+function sanitizeReverseImageSearchResult(
+  value: ReverseImageSearchResult | undefined
+): ReverseImageSearchResult | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const status = value.status === "checked" ? "checked" : "unavailable";
+  return {
+    status,
+    summary:
+      typeof value.summary === "string" && value.summary.trim()
+        ? value.summary.slice(0, 1000)
+        : status === "checked"
+          ? "Reverse image search completed."
+          : "Reverse image search was unavailable.",
+    credibleMatches: sanitizeReverseImageMatches(value.credibleMatches),
+    riskyMatches: sanitizeReverseImageMatches(value.riskyMatches)
+  };
+}
+
+function sanitizeReverseImageMatches(matches: ReverseImageMatch[] | undefined): ReverseImageMatch[] {
+  if (!Array.isArray(matches)) return [];
+  return matches
+    .filter((match) => Boolean(match) && typeof match.url === "string" && match.url.startsWith("http"))
+    .slice(0, 5)
+    .map((match) => ({
+      title: typeof match.title === "string" && match.title.trim() ? match.title.slice(0, 240) : undefined,
+      url: match.url.slice(0, 2048),
+      sourceName:
+        typeof match.sourceName === "string" && match.sourceName.trim()
+          ? match.sourceName.slice(0, 160)
+          : undefined,
+      sourceType: [
+        "official",
+        "education",
+        "news",
+        "medical",
+        "government",
+        "social",
+        "other"
+      ].includes(match.sourceType || "")
+        ? match.sourceType
+        : undefined,
+      similarity: ["exact", "near", "related"].includes(match.similarity || "")
+        ? match.similarity
+        : undefined,
+      context:
+        typeof match.context === "string" && match.context.trim() ? match.context.slice(0, 500) : undefined
+    }));
+}
+
 function dedupeActions(actions: RequestedAction[]): RequestedAction[] {
   const seen = new Set<string>();
   return actions.filter((action) => {
@@ -1986,6 +2251,7 @@ function mergeModelAssessment(
     riskSignals: model.riskSignals?.length ? model.riskSignals : baseline.riskSignals,
     requestedActions: model.requestedActions?.length ? model.requestedActions : baseline.requestedActions,
     accountCredibility: model.accountCredibility || baseline.accountCredibility,
+    reverseImageSearch: model.reverseImageSearch || baseline.reverseImageSearch,
     analysisVersion: model.analysisVersion || baseline.analysisVersion || ANALYSIS_VERSION
   });
 }
@@ -2035,6 +2301,7 @@ async function maybeAddWebVerification(
                   selectedText: request.selectedText,
                   screenshotOcrText: request.screenshotOcrText,
                   imageDescription: request.imageCrop?.description,
+                  reverseImageSearch: request.reverseImageSearch,
                   url: request.url,
                   accountContext: request.accountContext,
                   extractedLinks: request.extractedLinks,
