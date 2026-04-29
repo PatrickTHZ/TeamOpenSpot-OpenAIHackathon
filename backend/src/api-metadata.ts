@@ -11,6 +11,8 @@ export function publicRuntimeConfig(
     | "OCR_ENABLED"
     | "OCR_ENGINE"
     | "OCR_TIMEOUT_MS"
+    | "WEB_VERIFICATION_ENABLED"
+    | "WEB_VERIFICATION_TIMEOUT_MS"
     | "EVIDENCE_STORAGE_ENABLED"
   >
 ) {
@@ -22,6 +24,8 @@ export function publicRuntimeConfig(
     ocrEnabled: env.OCR_ENABLED === "true",
     ocrEngine: env.OCR_ENGINE || "tesseract",
     ocrTimeoutMs: Number.parseInt(env.OCR_TIMEOUT_MS || "3000", 10),
+    webVerificationEnabled: env.WEB_VERIFICATION_ENABLED === "true",
+    webVerificationTimeoutMs: Number.parseInt(env.WEB_VERIFICATION_TIMEOUT_MS || "6000", 10),
     evidenceStorageEnabled: env.EVIDENCE_STORAGE_ENABLED === "true"
   };
 }
@@ -48,7 +52,8 @@ export function assessSchema() {
       contentType: "post | article | reel | unknown",
       locale: "BCP-47 locale hint, for example en-AU",
       consentToStoreEvidence: "true only when user agrees to training/QA storage",
-      consentLabel: "Short consent/audit label"
+      consentLabel: "Short consent/audit label",
+      verificationMode: "fast | web"
     },
     outputs: {
       score: "0-100 credibility score",
@@ -66,6 +71,7 @@ export function assessSchema() {
       riskSignals: "Category-level risk trace for frontend/debug use",
       requestedActions: "Detected actions the content asks the user to take",
       analysisVersion: "Version of deterministic risk rules",
+      webVerification: "Optional web source checking result when requested and enabled",
       evidenceId: "Only present when opt-in storage succeeds",
       storedEvidenceUrl: "Only present when opt-in storage succeeds"
     }

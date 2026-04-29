@@ -28,6 +28,7 @@ Base URLs:
 - Decoded image crop bytes are capped at about `1.8MB`.
 - Docker/self-host can OCR `imageCrop.dataUrl` with Tesseract when `OCR_ENABLED=true`.
 - Cloudflare Worker does not run local OCR; send `screenshotOcrText` from the client or enable OpenAI vision.
+- Optional web source checking is available with `verificationMode: "web"` when `WEB_VERIFICATION_ENABLED=true`.
 
 ## Minimal Request
 
@@ -64,6 +65,7 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
   },
   "contentType": "post",
   "locale": "en-AU",
+  "verificationMode": "fast",
   "consentToStoreEvidence": false,
   "consentLabel": "training-qa-v1"
 }
@@ -104,6 +106,24 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
     }
   ],
   "analysisVersion": "risk-rules-2026-04-29.2",
+  "webVerification": {
+    "status": "checked",
+    "summary": "Optional source checking result when verificationMode is web.",
+    "claims": [
+      {
+        "claim": "Example claim",
+        "verdict": "not_found",
+        "explanation": "No reliable supporting source was found."
+      }
+    ],
+    "sources": [
+      {
+        "title": "Example source",
+        "url": "https://example.com",
+        "sourceType": "other"
+      }
+    ]
+  },
   "evidenceId": "only-present-when-stored",
   "storedEvidenceUrl": "/v1/evidence/only-present-when-stored"
 }
@@ -130,3 +150,5 @@ Trusted examples include `.gov.au`, `.edu.au`, `.gov`, `.edu`, `.nhs.uk`, `abc.n
 Risky patterns include URL shorteners, punycode `xn--`, IP-address links, and domains containing `login`, `verify`, `account`, `prize`, `gift`, or `claim`.
 
 Claim verification means checking whether supplied evidence supports the claim. It does not browse the web or prove claims independently.
+
+When `verificationMode` is `web` and the backend has `WEB_VERIFICATION_ENABLED=true`, the backend asks OpenAI's hosted web search tool to look for supporting or contradicting public sources. This is slower than fast mode and should be used for a details view or user-requested source check.

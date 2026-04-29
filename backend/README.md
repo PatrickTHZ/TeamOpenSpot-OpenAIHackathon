@@ -118,6 +118,8 @@ Runtime knobs:
 - `OCR_ENGINE`: defaults to `tesseract`.
 - `OCR_LANG`: defaults to `eng`.
 - `OCR_TIMEOUT_MS`: defaults to `3000`; OCR failure does not fail assessment.
+- `WEB_VERIFICATION_ENABLED`: defaults to `false`; enables requested web source checking.
+- `WEB_VERIFICATION_TIMEOUT_MS`: defaults to `6000`; source checking failure does not fail assessment.
 
 The deterministic rules cover:
 
@@ -126,6 +128,22 @@ The deterministic rules cover:
 - link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
 - claim verification: whether high-impact claims have supplied trusted source evidence
 - AI-image suspicion: OCR/image descriptions that mention editing, deepfakes, manipulation, or sensational image claims
+
+## Web Source Checking
+
+Fast mode does not browse the web. If the client sends `verificationMode: "web"` and the server has `WEB_VERIFICATION_ENABLED=true`, the backend asks OpenAI's hosted web search tool to look for supporting or contradicting public sources.
+
+Use this for a details view or an explicit "check sources" action, not for every feed scan:
+
+```json
+{
+  "client": "chrome",
+  "visibleText": "Example claim to verify",
+  "verificationMode": "web"
+}
+```
+
+The response may include `webVerification` with claim verdicts and source URLs. If search times out or is unavailable, the API still returns the normal risk assessment.
 
 ## OCR
 

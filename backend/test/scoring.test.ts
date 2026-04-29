@@ -55,6 +55,16 @@ describe("validateAssessRequest", () => {
     expect(request.consentLabel).toBe("training-qa-v1");
   });
 
+  it("accepts optional web verification mode", () => {
+    const request = validateAssessRequest({
+      client: "chrome",
+      visibleText: "Example claim",
+      verificationMode: "web"
+    });
+
+    expect(request.verificationMode).toBe("web");
+  });
+
   it("caps long request fields and repeated arrays", () => {
     const request = validateAssessRequest({
       client: "chrome",

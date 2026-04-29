@@ -23,6 +23,7 @@ export interface CredibilityAssessRequest {
   imageCrop?: ImageCropEvidence;
   consentToStoreEvidence?: boolean;
   consentLabel?: string;
+  verificationMode?: "fast" | "web";
   contentType?: "post" | "article" | "reel" | "unknown";
 }
 
@@ -60,6 +61,7 @@ export interface CredibilityAssessResponse {
   riskSignals?: PublicRiskSignal[];
   requestedActions?: RequestedAction[];
   analysisVersion?: string;
+  webVerification?: WebVerification;
   evidenceId?: string;
   storedEvidenceUrl?: string;
 }
@@ -87,6 +89,25 @@ export interface RequestedAction {
   risk: "low" | "medium" | "high";
   target?: string;
   advice: string;
+}
+
+export interface WebVerification {
+  status: "skipped" | "checked" | "unavailable";
+  summary: string;
+  claims: VerifiedClaim[];
+  sources: VerificationSource[];
+}
+
+export interface VerifiedClaim {
+  claim: string;
+  verdict: "supported" | "unsupported" | "mixed" | "not_found";
+  explanation: string;
+}
+
+export interface VerificationSource {
+  title: string;
+  url: string;
+  sourceType?: "official" | "news" | "medical" | "other";
 }
 
 export const credibilityResponseJsonSchema = {

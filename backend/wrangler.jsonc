@@ -13,6 +13,8 @@
     "OPENAI_ENABLE_VISION": "false",
     "MAX_REQUEST_BYTES": "3500000",
     "OCR_ENABLED": "false",
+    "WEB_VERIFICATION_ENABLED": "false",
+    "WEB_VERIFICATION_TIMEOUT_MS": "6000",
     "EVIDENCE_STORAGE_ENABLED": "false"
   }
 }

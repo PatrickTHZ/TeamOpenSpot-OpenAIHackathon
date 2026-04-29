@@ -8,7 +8,8 @@ import type {
   CredibilityAssessRequest,
   CredibilityAssessResponse,
   PublicRiskSignal,
-  RequestedAction
+  RequestedAction,
+  WebVerification
 } from "../../shared/credibility-contract.ts";
 import type { Env } from "./types";
 
@@ -20,6 +21,8 @@ const MAX_IMAGE_DATA_URL_LENGTH = 2_500_000;
 const MAX_IMAGE_BYTES = 1_800_000;
 const DEFAULT_OPENAI_TIMEOUT_MS = 2500;
 const MAX_OPENAI_TIMEOUT_MS = 6000;
+const DEFAULT_WEB_VERIFICATION_TIMEOUT_MS = 6000;
+const MAX_WEB_VERIFICATION_TIMEOUT_MS = 12000;
 
 interface RiskSignal {
   category:
@@ -94,6 +97,9 @@ export function validateAssessRequest(value: unknown): CredibilityAssessRequest 
   }
   if (typeof input.consentLabel === "string" && input.consentLabel.trim()) {
     request.consentLabel = input.consentLabel.slice(0, 200);
+  }
+  if (input.verificationMode === "fast" || input.verificationMode === "web") {
+    request.verificationMode = input.verificationMode;
   }
 
   if (!hasUsefulEvidence(request)) {
@@ -183,7 +189,7 @@ export async function assessCredibility(
 ): Promise<CredibilityAssessResponse> {
   const baseline = heuristicAssessment(request);
   if (!env.OPENAI_API_KEY) {
-    return baseline;
+    return maybeAddWebVerification(baseline, request, env);
   }
 
   const content: Array<
@@ -283,9 +289,13 @@ export async function assessCredibility(
       throw new Error("OpenAI response did not contain structured output text.");
     }
 
-    return mergeModelAssessment(baseline, normalizeAssessment(JSON.parse(text) as CredibilityAssessResponse));
+    const assessment = mergeModelAssessment(
+      baseline,
+      normalizeAssessment(JSON.parse(text) as CredibilityAssessResponse)
+    );
+    return maybeAddWebVerification(assessment, request, env);
   } catch {
-    return baseline;
+    return maybeAddWebVerification(baseline, request, env);
   } finally {
     clearTimeout(timeout);
   }
@@ -1052,6 +1062,129 @@ function mergeModelAssessment(
     requestedActions: model.requestedActions?.length ? model.requestedActions : baseline.requestedActions,
     analysisVersion: model.analysisVersion || baseline.analysisVersion || ANALYSIS_VERSION
   });
+}
+
+async function maybeAddWebVerification(
+  assessment: CredibilityAssessResponse,
+  request: CredibilityAssessRequest,
+  env: Env
+): Promise<CredibilityAssessResponse> {
+  if (
+    request.verificationMode !== "web" ||
+    env.WEB_VERIFICATION_ENABLED !== "true" ||
+    !env.OPENAI_API_KEY
+  ) {
+    return assessment;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), webVerificationTimeoutMs(env));
+
+  try {
+    const response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL || "gpt-5",
+        max_output_tokens: 1200,
+        tools: [{ type: "web_search_preview" }],
+        instructions: [
+          "You verify public claims for a cautious misinformation-detection backend.",
+          "Search the web for independent support from official, medical, scientific, or reputable news sources.",
+          "Do not overstate certainty. If sources do not clearly support the claim, say not_found or mixed.",
+          "Return only JSON matching this shape: {\"status\":\"checked\",\"summary\":\"...\",\"claims\":[{\"claim\":\"...\",\"verdict\":\"supported|unsupported|mixed|not_found\",\"explanation\":\"...\"}],\"sources\":[{\"title\":\"...\",\"url\":\"...\",\"sourceType\":\"official|news|medical|other\"}]}."
+        ].join(" "),
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: JSON.stringify({
+                  visibleText: request.visibleText,
+                  selectedText: request.selectedText,
+                  screenshotOcrText: request.screenshotOcrText,
+                  imageDescription: request.imageCrop?.description,
+                  url: request.url,
+                  extractedLinks: request.extractedLinks,
+                  currentAssessment: {
+                    label: assessment.label,
+                    riskLevel: assessment.riskLevel,
+                    why: assessment.why
+                  }
+                })
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) return assessment;
+
+    const payload = (await response.json()) as unknown;
+    const text = extractOutputText(payload);
+    if (!text) return assessment;
+
+    return {
+      ...assessment,
+      webVerification: sanitizeWebVerification(JSON.parse(text) as WebVerification)
+    };
+  } catch {
+    return {
+      ...assessment,
+      webVerification: {
+        status: "unavailable",
+        summary: "Source checking was unavailable, so this result uses visible evidence only.",
+        claims: [],
+        sources: []
+      }
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function sanitizeWebVerification(value: WebVerification): WebVerification {
+  const status = value.status === "checked" ? "checked" : "unavailable";
+  const claims = Array.isArray(value.claims)
+    ? value.claims.slice(0, 5).map((claim) => ({
+        claim: String(claim.claim || "").slice(0, 500),
+        verdict: ["supported", "unsupported", "mixed", "not_found"].includes(claim.verdict)
+          ? claim.verdict
+          : "not_found",
+        explanation: String(claim.explanation || "").slice(0, 700)
+      }))
+    : [];
+  const sources = Array.isArray(value.sources)
+    ? value.sources
+        .filter((source) => typeof source.url === "string" && source.url.startsWith("http"))
+        .slice(0, 8)
+        .map((source) => ({
+          title: String(source.title || source.url).slice(0, 200),
+          url: source.url.slice(0, 1000),
+          sourceType: ["official", "news", "medical", "other"].includes(source.sourceType || "")
+            ? source.sourceType
+            : "other"
+        }))
+    : [];
+
+  return {
+    status,
+    summary: String(value.summary || "Source checking completed.").slice(0, 1000),
+    claims,
+    sources
+  };
+}
+
+function webVerificationTimeoutMs(env: Env): number {
+  const parsed = Number.parseInt(env.WEB_VERIFICATION_TIMEOUT_MS || "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_WEB_VERIFICATION_TIMEOUT_MS;
+  return Math.min(parsed, MAX_WEB_VERIFICATION_TIMEOUT_MS);
 }
 
 function clampScore(value: number): number {
