@@ -236,6 +236,15 @@ describe("heuristicAssessment", () => {
       expect.arrayContaining(["click_link", "call_phone", "send_money", "share_code", "download_file"])
     );
   });
+
+  it("does not treat words like clickable or public as call/click requests", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "This public post says no clickable URL is shown in the screenshot."
+    });
+
+    expect(result.requestedActions).toBeUndefined();
+  });
 });
 
 describe("extractOutputText", () => {

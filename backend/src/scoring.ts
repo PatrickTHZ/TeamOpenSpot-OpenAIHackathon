@@ -911,7 +911,7 @@ function detectRequestedActions(
   const actions: RequestedAction[] = [];
   const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
 
-  if (/click|tap|open|visit|follow the link|link below/.test(text) || request.extractedLinks?.length) {
+  if (/\b(click|tap|open|visit)\b|follow the link|link below/.test(text) || request.extractedLinks?.length) {
     actions.push({
       action: "click_link",
       risk: highRisk ? "high" : "medium",
@@ -922,7 +922,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/call|phone|ring|contact us/.test(text) || /\+?\d[\d\s().-]{7,}\d/.test(text)) {
+  if (/\b(call|phone|ring)\b|contact us/.test(text) || /\+?\d[\d\s().-]{7,}\d/.test(text)) {
     actions.push({
       action: "call_phone",
       risk: highRisk ? "high" : "medium",
@@ -930,7 +930,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/send money|transfer|pay now|payment|gift card|crypto|bitcoin|bank transfer/.test(text)) {
+  if (/send money|\btransfer\b|pay now|\bpayment\b|gift card|\bcrypto\b|\bbitcoin\b|bank transfer/.test(text)) {
     actions.push({
       action: "send_money",
       risk: "high",
@@ -938,7 +938,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/one.?time code|otp|verification code|login code|security code|password|pin\b/.test(text)) {
+  if (/one.?time code|\botp\b|verification code|login code|security code|\bpassword\b|\bpin\b/.test(text)) {
     actions.push({
       action: "share_code",
       risk: "high",
@@ -954,7 +954,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/download|install|attachment|apk|exe|zip/.test(text)) {
+  if (/\b(download|install|attachment|apk|exe|zip)\b/.test(text)) {
     actions.push({
       action: "download_file",
       risk: "high",
@@ -962,7 +962,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/reply|respond|message me|dm me|whatsapp|telegram/.test(text)) {
+  if (/\b(reply|respond)\b|message me|dm me|\bwhatsapp\b|\btelegram\b/.test(text)) {
     actions.push({
       action: "reply_message",
       risk: highRisk ? "high" : "medium",
