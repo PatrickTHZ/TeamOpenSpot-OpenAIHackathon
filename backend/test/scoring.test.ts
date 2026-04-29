@@ -454,6 +454,109 @@ describe("heuristicAssessment", () => {
     expect(result.evidenceAgainst).toEqual([]);
   });
 
+  it("does not mark ordinary personal Facebook posts as high risk just because no link was captured", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Like button. Double tap and hold to react to the comment.",
+      visibleText:
+        "Like button. Double tap and hold to react to the comment.\nComment\nShare button. Double tap to share the post.\nAlex McNaught\n2d•Shared with: Public\nYay I've now got half a moon! It's a decent size so only 1/4 at a time fits on the print bed and takes 12-15 hours each quarter to print. I got a matte grey filament to best match.",
+      screenshotOcrText: "Image or video description: Alex McNaught Profile picture\nImage or video description: Photo",
+      visibleProfileSignals: ["App detected: Facebook", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: {
+        description: "Image or video description: Alex McNaught Profile picture\nImage or video description: Photo"
+      }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.riskLevel).toBe("low");
+    expect(result.requestedActions).toBeUndefined();
+  });
+
+  it("treats normal verified sponsored ads as ordinary commercial content when no scam signal is present", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Is there a app that's free that you can view your shot while shooting",
+      visibleText:
+        "Amazon Web Services\nSponsored•Shared with: Public\nLearn how to integrate and scale production-ready AI solutions using proven architectures. Shared Link: Form, AWS Summit Sydney. Sign up.",
+      screenshotOcrText: "Image or video description: Image",
+      visibleProfileSignals: ["App detected: Facebook", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: { description: "Visible image or video has no readable description." }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(60);
+    expect(result.riskLevel).not.toBe("high");
+    expect(result.requestedActions?.[0]?.risk).toBe("medium");
+  });
+
+  it("does not let the word who accidentally match World Health Organization", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Who has the cheapest first aid course in port?",
+      visibleText:
+        "Who has the cheapest first aid course in port?\nADF Careers\nSponsored•Shared with: Public\nWork at the leading edge of technical innovation in the Navy, Army or Air Force.",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "ADF Careers Profile picture" }
+    });
+
+    expect(result.riskSignals?.some((signal) => signal.message.includes("World Health Organization"))).not.toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(60);
+  });
+
+  it("treats official public-safety Facebook posts as credible enough to check, not automatically suspicious", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Like button. Double tap and hold to react to the comment.",
+      visibleText:
+        "CHP - Westminster .•Follow\nCHP - Westminster\nFollow\n22 Apr•Shared with: Public\nLaser Strike Arrest. Consequences of laser strikes on aircraft. Air 51 monitoring locations.",
+      screenshotOcrText: "Image or video description: CHP - Westminster Profile picture\nVisible image or video has no readable description.",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "Image or video description: CHP - Westminster Profile picture" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(70);
+    expect(result.riskLevel).not.toBe("high");
+    expect(result.evidenceFor.join(" ")).toContain("institutional");
+    expect(result.requestedActions).toBeUndefined();
+  });
+
+  it("keeps local incident group posts in needs-checking rather than red by default", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Like button. Double tap and hold to react to the comment.",
+      visibleText:
+        "Sydney Trains Complaint\nJordan Collier · 14m · Shared with: Public group\nTrain stopped in between Leumeah and Campbelltown due to someone being on the tracks. Police are in the process of getting the culprit.",
+      screenshotOcrText: "Image or video description: Photo",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "Image or video description: Photo" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(50);
+    expect(result.score).toBeLessThan(75);
+    expect(result.riskLevel).toBe("medium");
+    expect(result.requestedActions).toBeUndefined();
+  });
+
+  it("treats product support anecdotes as ordinary discussion, not misinformation", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "DJI Osmo Pocket 4s both now WiFi Bricked",
+      visibleText:
+        "DJI Osmo Pocket 4s both now WiFi Bricked. I bought 2 Pocket 4s, both now WiFi bricked after firmware update. DJI Support told me it must be faulty and to return it.",
+      screenshotOcrText: "Image or video description: Photo",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "Image or video description: Photo" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.riskLevel).toBe("low");
+  });
+
   it("uses credible reverse image matches to lift image provenance", () => {
     const result = heuristicAssessment({
       client: "android",

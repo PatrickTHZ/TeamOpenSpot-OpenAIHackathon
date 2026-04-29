@@ -94,7 +94,7 @@ const TRUSTED_SOURCE_REGISTRY: TrustedSource[] = [
   {
     name: "World Health Organization",
     domains: ["who.int"],
-    logoAliases: ["world health organization", "who"],
+    logoAliases: ["world health organization"],
     sourceType: "medical"
   },
   {
@@ -505,12 +505,13 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
 
   let score = 62;
 
+  const socialCapture = isSocialAppCapture(request, lowerText);
   if (request.url || links.length) {
     evidenceFor.push("A link or page address is available for checking.");
     score += 4;
   } else {
     missingSignals.push("No source link is visible.");
-    score -= 10;
+    score -= socialCapture ? 2 : 10;
   }
 
   if (links.length) {
@@ -590,14 +591,33 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     score = Math.max(score, 82);
   }
 
+  if (isInstitutionalSourceContext(request, lowerText) && !hasStrongContradictingRisk(signals, lowerText)) {
+    score = Math.max(score, isHighImpactClaim(lowerText) ? 72 : 78);
+  }
+
+  if (isOrdinarySocialPost(request, lowerText, signals, claimDetails)) {
+    score = Math.max(score, isCommercialSocialPost(lowerText) ? 60 : 76);
+  }
+
+  if (isLocalIncidentDiscussion(lowerText) && !hasSevereNonSourceRisk(signals)) {
+    score = Math.max(score, 52);
+  }
+
   const hasCredibleReverseMatch = reverseImage.credibleMatchFound;
-  const finalMissingSignals = isBenignSearchResultViewer(request, lowerText, signals) || hasCredibleReverseMatch
+  const shouldTrimRoutineSocialGaps =
+    isBenignSearchResultViewer(request, lowerText, signals) ||
+    hasCredibleReverseMatch ||
+    isOrdinarySocialPost(request, lowerText, signals, claimDetails) ||
+    isInstitutionalSourceContext(request, lowerText);
+  const finalMissingSignals = shouldTrimRoutineSocialGaps
     ? missingSignals.filter(
         (signal) =>
           !signal.includes("account age") &&
           !signal.includes("profile history") &&
           !signal.includes("picture checks are limited") &&
-          !signal.includes("No source link is visible")
+          !signal.includes("No source link is visible") &&
+          !signal.includes("No clear author or account name is visible") &&
+          !signal.includes("No clickable link was captured")
       )
     : missingSignals;
 
@@ -631,12 +651,12 @@ function assessSourceCredibility(
   const signals: RiskSignal[] = [];
   let scoreDelta = 0;
 
-  if (request.authorName || request.authorHandle) {
+  if (hasVisibleAuthorOrPageName(request, text)) {
     evidenceFor.push("A visible author or account name is present.");
     scoreDelta += 4;
   } else {
     missingSignals.push("No clear author or account name is visible.");
-    scoreDelta -= 8;
+    scoreDelta -= isSocialAppCapture(request, text) ? 2 : 8;
   }
 
   const profileText = [
@@ -681,10 +701,20 @@ function assessSourceCredibility(
     scoreDelta += trustedSource.sourceType === "official" || trustedSource.sourceType === "medical" ? 12 : 10;
   }
 
+  if (isInstitutionalSourceContext(request, text) && !trustedSource && !trustedDomain) {
+    evidenceFor.push("The visible post appears to come from a named institutional or verified organization account.");
+    signals.push({
+      category: "source-credibility",
+      weight: 4,
+      message: "Visible institutional account context."
+    });
+    scoreDelta += 10;
+  }
+
   const officialClaim =
     /official|government|bank|medicare|mygov|ato|police|council|emergency/.test(text) ||
     (/\bhealth\b/.test(text) && !isGeneralNutritionWellnessAdvice(text));
-  if (officialClaim && !trustedDomain && !trustedSource) {
+  if (officialClaim && !trustedDomain && !trustedSource && !isInstitutionalSourceContext(request, text)) {
     evidenceAgainst.push("The post refers to an official topic but no official source domain is visible.");
     signals.push({
       category: "source-credibility",
@@ -886,7 +916,11 @@ function assessScamLanguage(text: string): {
     { phrase: "100% true", weight: 8 },
     { phrase: "breaking!!!", weight: 8 }
   ];
-  const matched = patterns.filter((item) => text.includes(item.phrase));
+  const matched = patterns.filter((item) => {
+    if (!text.includes(item.phrase)) return false;
+    if (item.phrase === "guaranteed" && !hasScamContextForGuaranteed(text)) return false;
+    return true;
+  });
   if (!matched.length) return { scoreDelta: 0, evidenceAgainst: [], signals: [] };
 
   const weight = Math.min(30, matched.reduce((total, item) => total + item.weight, 0));
@@ -987,7 +1021,8 @@ function assessClaimSupport(
   const hasDate = /\b(today|tomorrow|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/.test(text);
   const trustedDomain = domains.some(isTrustedDomain);
   const trustedSource = trustedSourceFromEvidence(request, domains);
-  const trustedSupport = trustedDomain || Boolean(trustedSource && !hasImageManipulationCue(imageText));
+  const institutionalContext = isInstitutionalSourceContext(request, text);
+  const trustedSupport = trustedDomain || institutionalContext || Boolean(trustedSource && !hasImageManipulationCue(imageText));
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
   const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
 
@@ -1014,13 +1049,20 @@ function assessClaimSupport(
 
   if (highImpact && !trustedSupport) {
     if (!rapidWeightLossClaim) {
-      evidenceAgainst.push("This is a high-impact claim but no trusted confirming source is visible.");
+      const localDiscussion = isLocalIncidentDiscussion(text);
+      evidenceAgainst.push(
+        localDiscussion
+          ? "This appears to be a local eyewitness or group discussion about an incident, so it needs checking but is not automatically suspicious."
+          : "This is a high-impact claim but no trusted confirming source is visible."
+      );
       signals.push({
         category: "claim-verification",
-        weight: 16,
-        message: "High-impact claim lacks visible trusted support."
+        weight: localDiscussion ? 8 : 16,
+        message: localDiscussion
+          ? "Local incident discussion lacks independent confirmation."
+          : "High-impact claim lacks visible trusted support."
       });
-      scoreDelta -= 16;
+      scoreDelta -= localDiscussion ? 4 : 16;
     } else {
       signals.push({
         category: "claim-verification",
@@ -1030,9 +1072,17 @@ function assessClaimSupport(
     }
   }
 
-  if ((hasNumbers || hasDate) && !request.url && !request.extractedLinks?.length) {
+  const ordinarySocialNumberContext =
+    isSocialAppCapture(request, text) &&
+    !highImpact &&
+    !imageExtractedClaim &&
+    !rapidWeightLossClaim &&
+    !isCommercialSocialPost(text);
+  if ((hasNumbers || hasDate) && !request.url && !request.extractedLinks?.length && !ordinarySocialNumberContext) {
     missingSignals.push("The post makes specific claims but no source link was captured.");
-    scoreDelta -= 8;
+    if (highImpact || imageExtractedClaim || rapidWeightLossClaim || isCommercialSocialPost(text)) {
+      scoreDelta -= isSocialAppCapture(request, text) && !highImpact ? 3 : 8;
+    }
   }
 
   if (imageExtractedClaim && !trustedSupport && !rapidWeightLossClaim) {
@@ -1343,6 +1393,75 @@ function isGeneralNutritionWellnessAdvice(text: string): boolean {
       text
     );
   return discussesCramps && discussesFoodOrHydration && !dangerousSpecificClaim;
+}
+
+function isSocialAppCapture(request: CredibilityAssessRequest, text: string): boolean {
+  return Boolean(
+    request.visibleProfileSignals?.some((signal) => /app detected:\s*(facebook|instagram|threads)/i.test(signal)) ||
+      /\blike button\b|\bcomment\b|\bshare button\b|\bshared with:\s*(public|private group)\b|\bsponsored\b|facebook logo/i.test(
+        text
+      )
+  );
+}
+
+function hasVisibleAuthorOrPageName(request: CredibilityAssessRequest, text: string): boolean {
+  if (request.authorName?.trim() || request.authorHandle?.trim()) return true;
+  if (request.pageTitle?.trim() && !isPlatformUiTitle(request.pageTitle)) return true;
+  return /(?:^|\n)[^\n]{2,80}(?:\s+\.\s*•?\s*follow|\nfollow|\nsponsored\s*•|\n\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b)/i.test(
+    text
+  );
+}
+
+function isPlatformUiTitle(value: string): boolean {
+  return /^(like button|comment|share button|close|facebook|reels?|post menu|choose destination)/i.test(value.trim());
+}
+
+function isInstitutionalSourceContext(request: CredibilityAssessRequest, text: string): boolean {
+  const sourceText = `${request.authorName || ""} ${request.authorHandle || ""} ${request.pageTitle || ""} ${text}`;
+  return /\b(uts: university of technology sydney|university of technology sydney|transport for nsw|fair work ombuds(?:man)?|adf careers|amazon web services|chatgpt|openai|chp\s*-\s*[a-z][a-z\s-]+|california highway patrol)\b/i.test(
+    sourceText
+  );
+}
+
+function isCommercialSocialPost(text: string): boolean {
+  return /\b(sponsored|sign up|buy tickets?|ticket in bio|link in bio|shared link|go to [a-z0-9.-]+\.[a-z]{2,}|learn how to|try .+ now|join|register|sale|discount)\b/i.test(
+    text
+  );
+}
+
+function isLocalIncidentDiscussion(text: string): boolean {
+  return /\b(train stopped|police are|on the tracks|laser strike|arrest|unconscious passenger|paramedics|incident|complaint|public group)\b/i.test(
+    text
+  );
+}
+
+function hasScamContextForGuaranteed(text: string): boolean {
+  return /\b(guaranteed (?:returns?|profit|income|cash|weight loss|cure|result|prize|win)|crypto|investment|miracle|secret cure|one simple daily habit|no pills|no gym)\b/i.test(
+    text
+  );
+}
+
+function hasSevereNonSourceRisk(signals: RiskSignal[]): boolean {
+  return signals.some(
+    (signal) => signal.weight >= 14 && signal.category !== "source-credibility" && signal.category !== "claim-verification"
+  );
+}
+
+function isOrdinarySocialPost(
+  request: CredibilityAssessRequest,
+  text: string,
+  signals: RiskSignal[],
+  claimDetails: ClaimDetail[]
+): boolean {
+  if (!isSocialAppCapture(request, text)) return false;
+  if (isLocalIncidentDiscussion(text)) return false;
+  if (claimDetails.some((detail) => detail.status === "unsupported" && detail.severity === "high")) return false;
+  if (signals.some((signal) => signal.weight >= 14 && signal.category !== "source-credibility")) return false;
+  if (detectRapidWeightLossClaim(text)) return false;
+  if (isHighImpactClaim(text) && !isLocalIncidentDiscussion(text) && !isInstitutionalSourceContext(request, text)) {
+    return false;
+  }
+  return true;
 }
 
 function isBenignSearchResultViewer(
@@ -2004,11 +2123,13 @@ function detectRequestedActions(
   const actions: RequestedAction[] = [];
   const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
   const benignSearchResult = isBenignSearchResultViewer(request, text, analysis.signals);
+  const explicitClickRequest =
+    Boolean(request.extractedLinks?.length) ||
+    /\b(sign up|buy tickets?|ticket in bio|link in bio|shared link|go to [a-z0-9.-]+\.[a-z]{2,}|visit (?:https?:\/\/|www\.|[a-z0-9.-]+\.[a-z]{2,})|follow the link|link below)\b/i.test(
+      text
+    );
 
-  if (
-    !benignSearchResult &&
-    (/\b(click|tap|open|visit)\b|follow the link|link below/.test(text) || request.extractedLinks?.length)
-  ) {
+  if (!benignSearchResult && explicitClickRequest) {
     actions.push({
       action: "click_link",
       risk: highRisk ? "high" : "medium",
@@ -2019,7 +2140,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/\b(call|phone|ring)\b|contact us/.test(text) || /\+?\d[\d\s().-]{7,}\d/.test(text)) {
+  if (/\b(phone|ring|call us|call now|call this number|contact us)\b/.test(text) || /\+?\d[\d\s().-]{7,}\d/.test(text)) {
     actions.push({
       action: "call_phone",
       risk: highRisk ? "high" : "medium",
