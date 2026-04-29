@@ -11,17 +11,30 @@ services:
       HOST: 0.0.0.0
       PORT: 5072
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5}
+      OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-2500}
+      OPENAI_ENABLE_VISION: ${OPENAI_ENABLE_VISION:-false}
+      MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-3500000}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      EVIDENCE_STORAGE_ENABLED: ${EVIDENCE_STORAGE_ENABLED:-false}
+      EVIDENCE_STORAGE_DIR: ${EVIDENCE_STORAGE_DIR:-/data/evidence}
+      EVIDENCE_STORE_RAW_TEXT: ${EVIDENCE_STORE_RAW_TEXT:-false}
+      EVIDENCE_HASH_SALT: ${EVIDENCE_HASH_SALT:-change-me}
+      EVIDENCE_ADMIN_TOKEN: ${EVIDENCE_ADMIN_TOKEN:-}
     ports:
       - "5072:5072"
+    volumes:
+      - trustlens-evidence:/data/evidence
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:5072/v1/assess',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client:'chrome',url:'https://example.com'})}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+          "node -e \"fetch('http://127.0.0.1:5072/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
         ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+
+volumes:
+  trustlens-evidence:
 

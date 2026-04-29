@@ -18,6 +18,20 @@ describe("validateAssessRequest", () => {
     expect(request.url).toBe("https://example.com/news");
   });
 
+  it("accepts extracted links and image crop evidence", () => {
+    const request = validateAssessRequest({
+      client: "chrome",
+      extractedLinks: [{ href: "https://bit.ly/example", source: "dom" }],
+      imageCrop: {
+        description: "Cropped post image containing text.",
+        crop: { x: 0, y: 10, width: 320, height: 180 }
+      }
+    });
+
+    expect(request.extractedLinks?.[0]?.href).toBe("https://bit.ly/example");
+    expect(request.imageCrop?.crop?.width).toBe(320);
+  });
+
   it("rejects empty evidence", () => {
     expect(() => validateAssessRequest({ client: "android" })).toThrow(/Provide at least/);
   });
@@ -61,6 +75,59 @@ describe("heuristicAssessment", () => {
     expect(result.label).toBe("Suspicious");
     expect(result.advice).toContain("Do not click");
     expect(result.missingSignals.join(" ")).toContain("Video and audio");
+  });
+
+  it("flags suspicious shortened links", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "Act now and verify your account to claim your prize.",
+      authorName: "Example Support",
+      extractedLinks: [{ href: "https://bit.ly/claim-now", source: "dom" }]
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.evidenceAgainst.join(" ")).toContain("links look shortened");
+  });
+
+  it("gives stronger support to official source domains", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      url: "https://www.health.gov.au/news/example-update",
+      visibleText: "The health department published an update today about vaccine appointments.",
+      authorName: "Department of Health",
+      visibleProfileSignals: ["official government page"]
+    });
+
+    expect(result.riskLevel).toBe("low");
+    expect(result.evidenceFor.join(" ")).toContain("official");
+  });
+
+  it("flags high-impact claims without trusted support", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "A secret cure is now guaranteed and doctors do not want you to know.",
+      authorName: "Health Truth Daily"
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.evidenceAgainst.join(" ")).toContain("high-impact claim");
+  });
+
+  it("flags anchor text and destination mismatches", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "Official myGov account notice.",
+      extractedLinks: [
+        {
+          text: "my.gov.au",
+          href: "https://account-verify-prize.example.com/login",
+          source: "dom"
+        }
+      ]
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.evidenceAgainst.join(" ")).toContain("different destination domain");
   });
 });
 

@@ -201,6 +201,17 @@ Example request:
   "visibleProfileSignals": ["posted 2h ago", "verified badge visible"],
   "selectedText": "",
   "screenshotOcrText": "",
+  "extractedLinks": [
+    {
+      "text": "official update",
+      "href": "https://example.com/post",
+      "source": "dom"
+    }
+  ],
+  "imageCrop": {
+    "description": "Optional cropped screenshot area for OCR and image-risk analysis.",
+    "dataUrl": "data:image/png;base64,..."
+  },
   "contentType": "post",
   "locale": "en-AU"
 }

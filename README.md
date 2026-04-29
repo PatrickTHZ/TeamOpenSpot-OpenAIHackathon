@@ -9,7 +9,7 @@ This workspace contains a split prototype for a social media/news credibility he
 
 Per the current handoff scope, this repo stops after the shared contract and backend. The Chrome extension and Android app can be implemented next against the stable `/v1/assess` contract below.
 
-The product is intentionally cautious: it produces a credibility estimate, not a final fact-check verdict. Missing public evidence is reported as missing instead of invented.
+The product is intentionally cautious: it produces a credibility estimate, not a final fact-check verdict. Missing public evidence is reported as missing instead of invented. Claim verification means checking whether supplied visible evidence supports the claim; it does not pretend to browse or prove facts when no source evidence is present.
 
 ## Target User Flow
 
@@ -47,6 +47,31 @@ Set your OpenAI key locally in `backend/.dev.vars`:
 ```text
 OPENAI_API_KEY=sk-your-key
 OPENAI_MODEL=gpt-5
+OPENAI_TIMEOUT_MS=2500
+OPENAI_ENABLE_VISION=false
+```
+
+Backend-only Docker quick start:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and add OPENAI_API_KEY when you want OpenAI OCR/image analysis.
+docker compose up --build
+```
+
+Ping the container:
+
+```powershell
+Invoke-RestMethod http://localhost:5072/health
+```
+
+Test the assessment endpoint:
+
+```powershell
+Invoke-RestMethod http://localhost:5072/v1/assess `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"client":"chrome","url":"https://example.com","visibleText":"Act now to claim your prize","extractedLinks":[{"href":"https://bit.ly/example","source":"dom"}]}'
 ```
 
 For production, store the key as a Cloudflare Worker secret:
@@ -69,6 +94,19 @@ Example request:
   "visibleText": "The local council published evacuation routes...",
   "authorName": "Example News",
   "visibleProfileSignals": ["Named source", "Published date visible"],
+  "extractedLinks": [
+    {
+      "text": "Read more",
+      "href": "https://example.com/news/story",
+      "source": "dom"
+    }
+  ],
+  "imageCrop": {
+    "description": "Optional cropped screenshot area for OCR and image-risk analysis.",
+    "dataUrl": "data:image/png;base64,..."
+  },
+  "consentToStoreEvidence": false,
+  "consentLabel": "optional-training-qa-v1",
   "locale": "en-AU",
   "contentType": "article"
 }

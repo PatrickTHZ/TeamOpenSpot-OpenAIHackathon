@@ -19,7 +19,29 @@ export interface CredibilityAssessRequest {
   selectedText?: string;
   locale?: string;
   screenshotOcrText?: string;
+  extractedLinks?: LinkEvidence[];
+  imageCrop?: ImageCropEvidence;
+  consentToStoreEvidence?: boolean;
+  consentLabel?: string;
   contentType?: "post" | "article" | "reel" | "unknown";
+}
+
+export interface LinkEvidence {
+  text?: string;
+  href: string;
+  source?: "visible" | "ocr" | "dom" | "manual";
+}
+
+export interface ImageCropEvidence {
+  dataUrl?: string;
+  mediaType?: "image/png" | "image/jpeg" | "image/webp";
+  description?: string;
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 export interface CredibilityAssessResponse {
@@ -35,6 +57,8 @@ export interface CredibilityAssessResponse {
   evidenceAgainst: string[];
   missingSignals: string[];
   recommendedAction: string;
+  evidenceId?: string;
+  storedEvidenceUrl?: string;
 }
 
 export const credibilityResponseJsonSchema = {

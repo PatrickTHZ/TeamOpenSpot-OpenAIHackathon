@@ -1,7 +1,11 @@
 node_modules/
 .dev.vars
+.env
 .wrangler/
 dist/
 coverage/
 *.log
+evidence/
+backend/evidence/
+data/evidence/
 

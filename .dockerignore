@@ -1,0 +1,10 @@
+.git
+.github
+backend/node_modules
+node_modules
+.env
+.dev.vars
+.wrangler
+dist
+coverage
+*.log

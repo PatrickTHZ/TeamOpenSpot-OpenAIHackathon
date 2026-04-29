@@ -1,6 +1,6 @@
 # Credibility Validator Backend
 
-Cloudflare Workers API for scoring visible social media/news evidence.
+Cloudflare Workers API for scoring visible social media/news evidence. The same scoring module can also run in Docker for quick backend-only testing.
 
 ## Commands
 
@@ -10,6 +10,14 @@ npm test
 npm run typecheck
 npx wrangler deploy --dry-run
 npm run dev
+```
+
+Backend-only Docker from the repo root:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+Invoke-RestMethod http://localhost:5072/health
 ```
 
 ## Environment
@@ -31,12 +39,16 @@ npx wrangler secret put OPENAI_API_KEY
 
 ## Endpoint
 
+`GET /health`
+
+Returns a small health payload for Docker, reverse proxies, and smoke tests.
+
 `POST /v1/assess`
 
 Required:
 
 - `client`: `android` or `chrome`
-- At least one of `visibleText`, `selectedText`, `screenshotOcrText`, or `url`
+- At least one of `visibleText`, `selectedText`, `screenshotOcrText`, `extractedLinks`, `imageCrop`, or `url`
 
 Optional useful fields:
 
@@ -44,6 +56,10 @@ Optional useful fields:
 - `authorName`
 - `authorHandle`
 - `visibleProfileSignals`
+- `extractedLinks`: links from DOM, OCR, visible text, or manual selection
+- `imageCrop`: optional cropped screenshot data URL or description for OpenAI OCR/image-risk analysis
+- `consentToStoreEvidence`: must be `true` before self-host training evidence can be stored
+- `consentLabel`: short consent/audit label, such as `training-qa-v1`
 - `locale`
 - `contentType`: `post`, `article`, `reel`, or `unknown`
 
@@ -58,6 +74,11 @@ It also returns UI-ready risk fields:
 
 The Android and Chrome clients should show `riskLevel` and `label` in the floating bubble, then show `why` and `advice` after tap.
 
+Optional storage response fields:
+
+- `evidenceId`: returned only when evidence storage is enabled and the request includes consent.
+- `storedEvidenceUrl`: protected self-host URL for later training/QA retrieval.
+
 ## Privacy
 
 The Worker does not store raw post text. Runtime logs contain only request ID, client type, latency, result band, and error category.
@@ -65,3 +86,85 @@ The Worker does not store raw post text. Runtime logs contain only request ID, c
 ## Fallback Behavior
 
 If `OPENAI_API_KEY` is missing, or if the OpenAI call fails, the Worker returns a local heuristic assessment. This keeps the client usable during setup and makes local testing easier.
+
+## Risk Pipeline
+
+The API is optimized for a fast response:
+
+```text
+validate request
+-> deterministic risk rules
+-> optional OpenAI refinement with timeout
+-> normalized elderly-friendly response
+```
+
+Runtime knobs:
+
+- `OPENAI_TIMEOUT_MS`: defaults to `2500`; max `6000`.
+- `OPENAI_ENABLE_VISION`: defaults to `false`. Keep this off for fast demos unless the client sends small cropped images and you specifically want model vision.
+- `MAX_REQUEST_BYTES`: defaults to `3500000`.
+
+The deterministic rules cover:
+
+- scam language: urgency, prizes, account verification, guaranteed cures, investment pressure
+- source credibility: visible author/profile signals, official-looking domains, suspicious domain patterns
+- link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
+- claim verification: whether high-impact claims have supplied trusted source evidence
+- AI-image suspicion: OCR/image descriptions that mention editing, deepfakes, manipulation, or sensational image claims
+
+## Claim Verification
+
+This backend does not claim to independently fact-check the internet in v1. It checks whether the claim is supported by evidence supplied in the request.
+
+Examples:
+
+- Health, emergency, finance, tax, police, legal, or recall claims need an official or established source domain.
+- Specific numbers, dates, or urgent instructions need a captured link/source.
+- Claims that depend on an image need OCR text, an image description, or an image crop.
+
+If that evidence is missing, the response should say `Needs checking`, `Suspicious`, or `Cannot verify` instead of pretending the claim is true or false.
+
+## Source Credibility
+
+Source credibility is a visible-evidence score, not a reputation database. It considers:
+
+- official domains such as `.gov.au`, `.edu.au`, `who.int`, `bom.gov.au`, and established news domains
+- visible author/account names and profile signals
+- verified/official profile hints supplied by the frontend
+- risky domain patterns such as shortened links, punycode, IP-address links, or login/verify/prize-style domains
+
+The frontend should capture as much source evidence as possible: page URL, post links, author name, author handle, verification badge text, account age text, and OCR text from screenshots.
+
+## Evidence Storage For Training/QA
+
+Self-host Docker can store opt-in evidence for later review. It is disabled by default and not used by the Cloudflare Worker path.
+
+Required server env:
+
+```text
+EVIDENCE_STORAGE_ENABLED=true
+EVIDENCE_STORAGE_DIR=/data/evidence
+EVIDENCE_STORE_RAW_TEXT=false
+EVIDENCE_HASH_SALT=change-me
+EVIDENCE_ADMIN_TOKEN=long-random-token
+```
+
+Required request fields:
+
+```json
+{
+  "consentToStoreEvidence": true,
+  "consentLabel": "training-qa-v1"
+}
+```
+
+By default, stored records include metadata, text lengths, URL/domain hashes, result labels, and the image crop file if supplied. Raw post text is not stored unless `EVIDENCE_STORE_RAW_TEXT=true`; keep that off unless you have explicit consent and a retention process.
+
+Protected training endpoints:
+
+```text
+GET /v1/evidence
+GET /v1/evidence/{evidenceId}
+GET /v1/evidence/{evidenceId}/image
+Authorization: Bearer <EVIDENCE_ADMIN_TOKEN>
+```
