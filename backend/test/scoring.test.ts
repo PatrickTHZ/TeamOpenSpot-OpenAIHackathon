@@ -202,6 +202,52 @@ describe("normalizeAssessment", () => {
 });
 
 describe("heuristicAssessment", () => {
+  it("skips Discord media picker screens instead of scoring them as posts", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Media Selector",
+      visibleText:
+        "Media Selector\nExpand\nBottom Sheet\nCamera\nBack 1 mention\nStart Voice Call\nSearch\nHotDoggsu (channel)\nToggle media keyboard\nToggle apps keyboard\nSend a gift\nMessage @HotDoggsu\nToggle emoji keyboard\nRecord Voice Message\nPhotos\nPoll\nFiles",
+      screenshotOcrText:
+        "Visible image or video has no readable description.\nImage or video description: Photo\nImage or video description: Photo",
+      visibleProfileSignals: ["App detected: com.discord", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: {
+        mediaType: "image/jpeg",
+        description: "Visible image or video has no readable description.\nImage or video description: Photo"
+      }
+    });
+
+    expect(result.riskLevel).toBe("unknown");
+    expect(result.label).toBe("Cannot verify");
+    expect(result.plainLanguageSummary).toContain("app control screen");
+    expect(result.requestedActions).toBeUndefined();
+  });
+
+  it("skips Samsung dialer and contact screens instead of warning about phone calls", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Create contact",
+      visibleText:
+        "Create contact\nTag\nSearch\nLarissaHustonDr +61400245405\nPujaGurung +61416035652\n1,Voicemail\n2 ,A,B,C\nABC\n3 ,D,E,F\nDEF\nCall\nDelete last digit\nSIM 1 button\nSIM 1",
+      screenshotOcrText:
+        "Image or video description: More options\nImage or video description: LarissaHustonDr Details\nImage or video description: Meet video call",
+      visibleProfileSignals: [
+        "App detected: com.samsung.android.dialer",
+        "Captured after scrolling paused for 1.5 seconds"
+      ],
+      imageCrop: {
+        mediaType: "image/jpeg",
+        description: "Image or video description: More options\nImage or video description: Meet video call"
+      }
+    });
+
+    expect(result.riskLevel).toBe("unknown");
+    expect(result.label).toBe("Cannot verify");
+    expect(result.requestedActions).toBeUndefined();
+  });
+
   it("flags limited reels analysis", () => {
     const result = heuristicAssessment({
       client: "android",

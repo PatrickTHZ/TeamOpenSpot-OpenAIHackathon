@@ -451,6 +451,8 @@ export function isInternalAppShellCapture(request: CredibilityAssessRequest): bo
   const text = allText(request).toLowerCase();
   if (!text.trim()) return false;
 
+  if (isNonAssessableAndroidAppShell(request, text)) return true;
+
   const hasExternalContentSignals = Boolean(
     request.url?.trim() ||
       request.authorName?.trim() ||
@@ -483,6 +485,29 @@ export function isInternalAppShellCapture(request: CredibilityAssessRequest): bo
   return matchedSignals >= 2 || (request.client === "android" && matchedSignals >= 1 && text.length < 1500);
 }
 
+function isNonAssessableAndroidAppShell(request: CredibilityAssessRequest, text: string): boolean {
+  if (request.client !== "android") return false;
+
+  const appSignals = (request.visibleProfileSignals || []).join("\n").toLowerCase();
+  const title = (request.pageTitle || "").toLowerCase();
+  const discordApp = /app detected:\s*(com\.)?discord\b/.test(appSignals);
+  const dialerApp = /app detected:\s*com\.samsung\.android\.dialer\b/.test(appSignals);
+
+  const discordMediaPicker =
+    discordApp &&
+    (/^media selector\b/.test(title) ||
+      /\b(media selector|bottom sheet|toggle media keyboard|toggle apps keyboard|send a gift|photos|poll|files|record voice message)\b/.test(
+        text
+      ));
+
+  const samsungDialerOrContacts =
+    dialerApp &&
+    (/\b(create contact|voicemail|sim 1 button|delete last digit|meet video call|asterisk|hash)\b/.test(text) ||
+      /\b\d\s*,?\s*(?:a,b,c|d,e,f|g,h,i|j,k,l|m,n,o|p,q,r,s|t,u,v|w,x,y,z)\b/.test(text));
+
+  return discordMediaPicker || samsungDialerOrContacts;
+}
+
 function skippedAppShellAssessment(): CredibilityAssessResponse {
   return {
     score: 50,
@@ -490,10 +515,10 @@ function skippedAppShellAssessment(): CredibilityAssessResponse {
     riskLevel: "unknown",
     label: "Cannot verify",
     confidence: "low",
-    plainLanguageSummary: "This looks like the TrustLens app screen, not a social post or article to check.",
+    plainLanguageSummary: "This looks like an app control screen, not a social post or article to check.",
     why: [
-      "The captured text appears to be TrustLens interface or a previous assessment result.",
-      "No outside post image, OCR text, author, or source URL was captured."
+      "The captured text appears to be app navigation, media picker, dialer, or TrustLens interface.",
+      "No clear outside post, article, claim, author, or source URL was captured."
     ],
     advice: "Open the original post or article before running a credibility check.",
     evidenceFor: [],
