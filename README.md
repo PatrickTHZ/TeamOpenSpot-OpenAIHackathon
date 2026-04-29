@@ -1,8 +1,8 @@
 # TrustLens
 
-**Safer scrolling, one pause at a time.**
+**A calm credibility layer for the internet's noisiest moments.**
 
-TrustLens is an Android-first credibility companion for social feeds, screenshots, links, and fast-moving claims. It waits until a user pauses, checks the visible evidence they are already looking at, and returns a calm, plain-language risk label before a scam, hoax, or panic-share gets a chance to travel.
+TrustLens is an Android-first credibility companion for social feeds, screenshots, links, and fast-moving claims. It waits until a user pauses, reads the visible evidence in front of them, and returns a simple risk label with the reasons behind it. The goal is not to make people suspicious of everything. The goal is to help them slow down at exactly the moment a scam, hoax, or panic-share wants them to rush.
 
 [![Build Android APK](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/actions/workflows/android-apk.yml/badge.svg)](https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/actions/workflows/android-apk.yml?query=branch%3Amain)
 
@@ -10,9 +10,18 @@ TrustLens is an Android-first credibility companion for social feeds, screenshot
 
 ## Why TrustLens
 
-Scams and misinformation usually work by rushing people: urgent language, hidden links, official-looking screenshots, and claims with no visible source. TrustLens gives users a second of friction without turning their feed into a courtroom.
+Online harm rarely arrives wearing a warning label. It looks like a prize notification, a breaking-news screenshot, a health claim from a friend, a fake delivery message, or a post that feels just urgent enough to share before checking. Most people do not need a lecture in that moment. They need a quick, respectful pause.
 
-It does not pretend to deliver a final fact-check verdict. It explains what the visible evidence supports, what is missing, and what the safest next step is.
+TrustLens gives users that pause. It looks at the text, links, screenshot context, source clues, and visible account signals already on screen, then explains what looks supported, what looks risky, and what is missing. Instead of pretending to be a final truth machine, TrustLens acts like a careful second set of eyes: calm, transparent, and useful before the user taps, shares, registers, or pays.
+
+It is designed for everyday uncertainty:
+
+- A parent sees an alarming school notice screenshot with no source.
+- A student gets a prize link in a group chat.
+- A shopper sees a too-good-to-be-true marketplace deal.
+- A user wants to know whether a post is credible enough to read, share, or ignore.
+
+TrustLens turns that moment into a clear next step: open the original source, avoid the link, verify the account, or continue with normal caution.
 
 ## App Preview
 
@@ -40,13 +49,27 @@ https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/raw/refs/heads/main/t
 
 ## Features
 
-- Pause-aware capture: avoids constant scanning while the user is actively scrolling.
-- Visible-evidence scoring: uses captured text, OCR hints, source links, page titles, and account signals.
-- Plain-language labels: turns credibility analysis into simple user-facing outcomes.
-- Link and source checks: flags shortened links, mismatched domains, missing official sources, and suspicious cues.
-- Screenshot-aware analysis: OCR text can feed the same scam, claim, and source checks as normal post text.
-- Docker-hosted landing page: `/` is the public website and `/v1/assess` is the API.
-- Android APK pipeline: GitHub Actions builds and publishes the APK artifact on every push.
+- Pause-aware capture: TrustLens waits for a natural pause instead of scanning constantly while the user scrolls.
+- Visible-evidence scoring: the backend weighs text, OCR hints, links, source hosts, page titles, and account signals.
+- Plain-language labels: results become `Likely safe`, `Needs checking`, `Suspicious`, or `Cannot verify`.
+- Link and source checks: shortened links, mismatched domains, missing official sources, and suspicious cues are surfaced clearly.
+- Screenshot-aware analysis: OCR text from screenshots can be assessed with the same risk logic as normal post text.
+- Privacy-conscious evidence handling: raw evidence storage is off by default and requires explicit consent.
+- Docker-hosted website and API: `/` serves the TrustLens homepage, `/download` serves the APK handoff, and `/v1/assess` remains the API.
+- Android APK pipeline: GitHub Actions builds the Android prototype so testers can download the latest package quickly.
+
+## What TrustLens Checks
+
+TrustLens combines fast heuristics with optional AI-backed assessment. The response is intentionally explainable, so the app can show users why a post needs caution instead of dropping a mysterious score on them.
+
+| Signal | What TrustLens looks for | Why it matters |
+| --- | --- | --- |
+| Urgency | "Act now", countdowns, limited-time pressure | Scams often force fast decisions before users verify. |
+| Link safety | Shorteners, mismatched domains, hidden destinations | Risky posts often hide where a tap will really go. |
+| Source quality | Official domains, visible author, account signals | Credible claims usually have traceable origin context. |
+| Claim type | Money, health, prizes, identity, emergencies | High-impact claims deserve stronger evidence. |
+| Missing context | No date, no link, cropped screenshot, no publisher | Missing context does not prove harm, but it lowers confidence. |
+| Screenshot text | OCR from image crops or shared screenshots | Many viral claims spread as images with the original source removed. |
 
 ## User Flow
 
@@ -62,7 +85,7 @@ User opens Facebook or a web feed
 
 ## Example Assessments
 
-TrustLens is built to explain context, not just return a score. A good result means the visible post gives the user enough stable evidence to keep reading with normal caution. A bad result means the post is using pressure, hiding its source, or sending the user somewhere risky.
+TrustLens is built to explain context, not just return a score. A good result means the visible post gives the user enough stable evidence to keep reading with normal caution. A bad result means the post is using pressure, hiding its source, asking for sensitive action, or sending the user somewhere risky.
 
 ### Good Example: Official Local Update
 
@@ -202,6 +225,39 @@ Result:
 }
 ```
 
+### High-Risk Example: Account Recovery Phishing
+
+Visible context:
+
+```text
+Your account will be locked today. Confirm your password immediately:
+https://secure-login.example-reset.com
+```
+
+Result:
+
+```json
+{
+  "score": 12,
+  "band": "red",
+  "riskLevel": "high",
+  "label": "Suspicious",
+  "confidence": "high",
+  "plainLanguageSummary": "This looks like a phishing attempt because it threatens account loss and sends the user to a login-style domain that is not clearly official.",
+  "why": [
+    "The message creates urgent pressure around account access.",
+    "It asks the user to confirm sensitive credentials.",
+    "The destination domain does not clearly match a trusted service."
+  ],
+  "advice": "Do not enter your password. Open the service directly from its official app or typed website address.",
+  "evidenceAgainst": [
+    "Credential request",
+    "Threat of account lockout",
+    "Suspicious login-style domain"
+  ]
+}
+```
+
 ## Project Structure
 
 - `backend/` - TypeScript Cloudflare Worker and Docker self-host server.
@@ -250,6 +306,8 @@ npm run dev
 ## API Example
 
 `POST /v1/assess`
+
+TrustLens clients send the backend the visible context they can safely collect: text on screen, known URL, page title, links, source hints, screenshot OCR, and whether the user consented to evidence storage. The backend returns a compact result for the floating app UI plus enough explanation to open a richer detail panel.
 
 ```powershell
 Invoke-RestMethod http://localhost:5072/v1/assess `

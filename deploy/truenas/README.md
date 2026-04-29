@@ -1,33 +1,51 @@
-# TrueNAS Self-Hosting Plan
+# TrustLens on TrueNAS
 
-This deployment runs the TrustLens backend API as a Docker container on TrueNAS.
+This guide runs TrustLens as a self-hosted Docker service on TrueNAS. The same container serves both the public homepage and the credibility assessment API, so `trustlens.z2hs.au` can be a polished product page while `/v1/assess` stays available for the Android app, browser clients, and demos.
 
-## Target
+## What You Are Deploying
 
-- Hostname: `trustlens.z2hs.au`
-- TrueNAS UI / server IP: `http://172.20.20.251/`
-- TrueNAS port: `5072`
-- Public homepage: `https://trustlens.z2hs.au/`
-- Public API endpoint: `https://trustlens.z2hs.au/v1/assess`
-- Local container endpoint: `http://172.20.20.251:5072/v1/assess`
+TrustLens is a TypeScript backend packaged as a Docker image. In this TrueNAS setup it provides:
+
+- `GET /` - the TrustLens landing page.
+- `GET /download` - the latest Android APK download handoff.
+- `GET /health` - runtime health, version, endpoints, and public config.
+- `POST /v1/assess` - the credibility assessment API.
+- `GET /v1/schema` - a compact machine-readable API summary.
+- `GET /v1/evidence/:id` - optional evidence retrieval when storage is enabled.
+
+The container listens on port `5072`. A reverse proxy should terminate HTTPS and forward the full path to the container.
+
+## Target Environment
+
+| Item | Value |
+| --- | --- |
+| Public hostname | `trustlens.z2hs.au` |
+| TrueNAS UI / server IP | `http://172.20.20.251/` |
+| Container port | `5072` |
+| Public homepage | `https://trustlens.z2hs.au/` |
+| Public APK page | `https://trustlens.z2hs.au/download` |
+| Public API endpoint | `https://trustlens.z2hs.au/v1/assess` |
+| Local API endpoint | `http://172.20.20.251:5072/v1/assess` |
 
 ## Files
 
 - `docker-compose.yml` - TrueNAS/Docker Compose service definition using the published GHCR image.
-- `.env.example` - copy to `.env` and add real API keys.
+- `.env.example` - environment template for model, CORS, OCR, verification, and evidence settings.
 
-Do not commit `.env`.
+Do not commit `.env`. It contains secrets and deployment-specific values.
 
-## Setup
+## Quick Start
 
-1. Copy `deploy/truenas/docker-compose.yml` and `deploy/truenas/.env.example` to a directory on TrueNAS.
-2. Copy the env template:
+1. Copy the TrueNAS deployment files into a directory on the TrueNAS host:
 
 ```sh
-cp deploy/truenas/.env.example deploy/truenas/.env
+mkdir -p /mnt/pool/apps/trustlens
+cp deploy/truenas/docker-compose.yml /mnt/pool/apps/trustlens/docker-compose.yml
+cp deploy/truenas/.env.example /mnt/pool/apps/trustlens/.env
+cd /mnt/pool/apps/trustlens
 ```
 
-3. Edit `deploy/truenas/.env`:
+2. Edit `.env` and add your real values:
 
 ```text
 OPENAI_API_KEY=sk-your-real-key
@@ -50,112 +68,168 @@ EVIDENCE_ADMIN_TOKEN=change-me
 ASSESSMENT_LOG_DETAIL=debug
 ```
 
-4. Start the service from the TrueNAS deploy directory:
+3. Pull and start the service:
 
 ```sh
 docker compose pull
 docker compose up -d
 ```
 
-5. Test locally:
+4. Confirm the container is healthy:
 
 ```sh
-curl -X POST http://172.20.20.251:5072/v1/assess \
-  -H "Content-Type: application/json" \
-  -d '{"client":"chrome","url":"https://example.com","visibleText":"Example post text"}'
+curl http://172.20.20.251:5072/health
 ```
 
-## DNS / Reverse Proxy
+5. Open the local homepage before wiring DNS:
 
-Point `trustlens.z2hs.au` to the TrueNAS server or reverse proxy.
+```text
+http://172.20.20.251:5072/
+```
 
-Recommended reverse proxy rule:
+## Reverse Proxy
+
+Point `trustlens.z2hs.au` at the TrueNAS host or a reverse proxy that can reach it.
+
+Recommended upstream:
 
 ```text
 trustlens.z2hs.au -> http://172.20.20.251:5072
 ```
 
-Use HTTPS at the reverse proxy layer. Keep the container on plain HTTP internally.
+Use HTTPS at the reverse proxy layer and keep the container on plain HTTP internally.
 
-Reverse proxy requirements:
+Proxy requirements:
 
-- Preserve `/` for the TrustLens landing page.
-- Preserve the request path, for example `/v1/assess` must reach `/v1/assess`.
+- Preserve `/` for the homepage.
+- Preserve `/download` for the Android APK page.
+- Preserve API paths exactly, for example `/v1/assess` must reach `/v1/assess`.
 - Allow `GET`, `POST`, and `OPTIONS`.
-- Forward the `Authorization` header for protected evidence endpoints.
-- Keep TLS termination at the proxy layer.
+- Forward `Authorization` for protected evidence endpoints.
+- Forward normal proxy headers such as `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
 
-## API Keys
+After the proxy is live, check:
 
-API keys are loaded from `.env` for speed and simple TrueNAS setup:
-
-```text
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.2
-OPENAI_TIMEOUT_MS=2500
-OPENAI_ENABLE_VISION=false
-MAX_REQUEST_BYTES=3500000
-OCR_ENABLED=false
-OCR_ENGINE=tesseract
-OCR_LANG=eng
-OCR_TIMEOUT_MS=3000
-WEB_VERIFICATION_ENABLED=false
-WEB_VERIFICATION_TIMEOUT_MS=6000
-EVIDENCE_STORAGE_ENABLED=false
-EVIDENCE_STORAGE_DIR=/data/evidence
-EVIDENCE_STORE_RAW_TEXT=false
-EVIDENCE_HASH_SALT=change-me
-EVIDENCE_ADMIN_TOKEN=change-me
-ASSESSMENT_LOG_DETAIL=debug
+```sh
+curl https://trustlens.z2hs.au/health
+curl https://trustlens.z2hs.au/download
 ```
 
-The Android app and Chrome extension must never contain the OpenAI API key. They should call:
+## Test The API
+
+Fast local check:
+
+```sh
+curl -X POST http://172.20.20.251:5072/v1/assess \
+  -H "Content-Type: application/json" \
+  -d '{"client":"android","url":"https://example.com","visibleText":"Act now to claim your prize","extractedLinks":[{"href":"https://bit.ly/example","source":"dom"}]}'
+```
+
+Expected shape:
+
+```json
+{
+  "score": 48,
+  "band": "yellow",
+  "riskLevel": "medium",
+  "label": "Needs checking",
+  "confidence": "medium",
+  "why": [
+    "The post asks you to act urgently.",
+    "The link destination is shortened or unclear."
+  ],
+  "advice": "Open the original source before sharing."
+}
+```
+
+The Android app and browser clients should call:
 
 ```text
 https://trustlens.z2hs.au/v1/assess
 ```
 
-## Notes
+Never place the OpenAI API key inside the Android app, browser extension, or frontend code.
 
-- The Docker service uses the same scoring logic as the Cloudflare Worker.
-- If `OPENAI_API_KEY` is missing or OpenAI fails, the backend returns a local heuristic result.
-- Docker can run system Tesseract OCR for `imageCrop.dataUrl` when `OCR_ENABLED=true`; leave it off for fastest testing unless backend OCR is needed.
-- Web source checking requires `WEB_VERIFICATION_ENABLED=true` and request-level `verificationMode: "web"`; leave it off for fastest feed scanning.
-- Evidence/image storage is disabled by default and requires both `EVIDENCE_STORAGE_ENABLED=true` and request-level `consentToStoreEvidence=true`.
-- The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount.
-- Runtime logs avoid raw post text. They include request ID, client, safe source host, captured evidence types, score, band, label, risk level, risk signals, latency, OCR status, and storage status.
+## Environment Notes
 
-## Updating the Container
+### OpenAI
+
+If `OPENAI_API_KEY` is present, TrustLens can use the configured model for richer assessment. If the key is missing or the provider fails, the backend returns a local heuristic result so demos still work.
+
+Recommended baseline:
+
+```text
+OPENAI_MODEL=gpt-5.2
+OPENAI_TIMEOUT_MS=2500
+OPENAI_ENABLE_VISION=false
+```
+
+### OCR
+
+Docker can run system Tesseract OCR for `imageCrop.dataUrl` when OCR is enabled:
+
+```text
+OCR_ENABLED=true
+OCR_ENGINE=tesseract
+OCR_LANG=eng
+```
+
+Leave OCR off for fastest testing unless screenshot text needs to be processed on the backend.
+
+### Web Verification
+
+Web source checking is optional and slower than the normal feed scan path:
+
+```text
+WEB_VERIFICATION_ENABLED=true
+WEB_VERIFICATION_TIMEOUT_MS=6000
+```
+
+Requests can force a source check with `verificationMode: "web"` when the feature is enabled.
+
+### Evidence Storage
+
+Evidence storage is disabled by default. To store evidence, both the server and request must opt in:
+
+```text
+EVIDENCE_STORAGE_ENABLED=true
+EVIDENCE_STORAGE_DIR=/data/evidence
+EVIDENCE_STORE_RAW_TEXT=false
+```
+
+The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount in `docker-compose.yml`.
+
+## Updating TrustLens
 
 Run these commands on TrueNAS from the directory containing `docker-compose.yml` and `.env`:
 
 ```sh
-sudo docker compose pull trustlens-api
-sudo docker compose up -d trustlens-api
-sudo docker compose logs --tail=80 trustlens-api
+docker compose pull trustlens-api
+docker compose up -d trustlens-api
+docker compose logs --tail=80 trustlens-api
 ```
 
-If you are managing the container without Compose, replace only the TrustLens container:
+If you are managing the container without Compose:
 
 ```sh
-sudo docker pull ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
-sudo docker stop trustlens-api
-sudo docker rm trustlens-api
-sudo docker run -d \
+docker pull ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
+docker stop trustlens-api
+docker rm trustlens-api
+docker run -d \
   --name trustlens-api \
   --restart unless-stopped \
   --env-file .env \
   -p 5072:5072 \
   -v trustlens-evidence:/data/evidence \
   ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
-sudo docker logs --tail=80 trustlens-api
+docker logs --tail=80 trustlens-api
 ```
 
 Do not stop `ix-culler-app-1` when updating TrustLens; that is a separate app.
 
 ## Watching Assessment Logs
 
-Follow the backend logs while requests flow through:
+Follow live logs:
 
 ```sh
 docker logs -f trustlens-api
@@ -175,7 +249,7 @@ Each successful assessment writes one JSON line with `event: "assessment_result"
   "requestId": "example-id",
   "latencyMs": 42,
   "status": "ok",
-  "client": "chrome",
+  "client": "android",
   "contentType": "post",
   "sourceHost": "www.instagram.com",
   "evidence": {
@@ -204,6 +278,14 @@ Each successful assessment writes one JSON line with `event: "assessment_result"
 
 `ASSESSMENT_LOG_DETAIL` controls log size:
 
-- `debug` logs the detailed safe result trace. This is the TrueNAS default.
+- `debug` logs the detailed safe result trace. This is useful during hackathon demos and early deployment.
 - `summary` logs a shorter safe result trace.
 - `off` disables assessment result logs.
+
+## Troubleshooting
+
+- Homepage works but API fails: check the proxy preserves `/v1/assess` and allows `POST`.
+- API works locally but not publicly: check DNS, TLS termination, firewall rules, and proxy upstream.
+- Results are heuristic only: confirm `OPENAI_API_KEY` is set and the container was restarted after editing `.env`.
+- APK page fails: confirm `/download` is forwarded to the same TrustLens container.
+- Evidence retrieval fails: check `EVIDENCE_STORAGE_ENABLED`, volume mount, and `Authorization` forwarding.
