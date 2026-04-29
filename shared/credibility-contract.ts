@@ -108,6 +108,14 @@ export interface ClaimDetail {
   explanation: string;
   missingEvidence: string[];
   guidanceComparison?: string;
+  sourceReferences?: ClaimSourceReference[];
+}
+
+export interface ClaimSourceReference {
+  title: string;
+  url: string;
+  sourceType: "official" | "medical" | "government" | "food-safety" | "other";
+  relevance: string;
 }
 
 export interface AccountContext {
@@ -241,7 +249,25 @@ export const credibilityResponseJsonSchema = {
           claim: { type: "string" },
           explanation: { type: "string" },
           missingEvidence: { type: "array", items: { type: "string" }, maxItems: 6 },
-          guidanceComparison: { type: "string" }
+          guidanceComparison: { type: "string" },
+          sourceReferences: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["title", "url", "sourceType", "relevance"],
+              properties: {
+                title: { type: "string" },
+                url: { type: "string" },
+                sourceType: {
+                  type: "string",
+                  enum: ["official", "medical", "government", "food-safety", "other"]
+                },
+                relevance: { type: "string" }
+              }
+            },
+            maxItems: 5
+          }
         }
       },
       maxItems: 6

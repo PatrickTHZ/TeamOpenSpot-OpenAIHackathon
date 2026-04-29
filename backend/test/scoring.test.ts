@@ -870,6 +870,12 @@ describe("heuristicAssessment", () => {
     });
     expect(result.claimDetails?.[0]?.missingEvidence.join(" ")).toContain("Safety cautions");
     expect(result.claimDetails?.[0]?.guidanceComparison).toContain("1-2 lb per week");
+    expect(result.claimDetails?.[0]?.sourceReferences?.map((source) => source.url)).toEqual(
+      expect.arrayContaining([
+        "https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html",
+        "https://www.cdc.gov/food-safety/foods/adults-65-older.html"
+      ])
+    );
   });
 
   it("flags raw mushroom gut-health routines aimed at older adults", () => {
@@ -901,6 +907,18 @@ describe("heuristicAssessment", () => {
     expect(result.claimDetails?.[0]?.claim).toContain("Raw mushrooms");
     expect(result.claimDetails?.[0]?.missingEvidence.join(" ")).toContain("Food-safety guidance");
     expect(result.claimDetails?.[0]?.guidanceComparison).toContain("older adults");
+    expect(result.claimDetails?.[0]?.sourceReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "CDC: Safer Food Choices for Adults 65 and Older",
+          sourceType: "food-safety"
+        }),
+        expect.objectContaining({
+          title: "FoodSafety.gov: People at Risk - Older Adults",
+          sourceType: "food-safety"
+        })
+      ])
+    );
   });
 
   it("detects common generated-by-AI image wording", () => {

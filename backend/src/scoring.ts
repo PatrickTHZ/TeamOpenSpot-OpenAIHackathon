@@ -9,6 +9,7 @@ import type {
   CredibilityAssessResponse,
   AccountCredibility,
   ClaimDetail,
+  ClaimSourceReference,
   PublicRiskSignal,
   ReverseImageMatch,
   ReverseImageSearchResult,
@@ -28,6 +29,34 @@ const DEFAULT_OPENAI_TIMEOUT_MS = 2500;
 const MAX_OPENAI_TIMEOUT_MS = 6000;
 const DEFAULT_WEB_VERIFICATION_TIMEOUT_MS = 6000;
 const MAX_WEB_VERIFICATION_TIMEOUT_MS = 12000;
+
+const CDC_WEIGHT_LOSS_SOURCE: ClaimSourceReference = {
+  title: "CDC: Steps for Losing Weight",
+  url: "https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html",
+  sourceType: "government",
+  relevance: "Used to compare rapid weight-loss promises with gradual, evidence-based weight-loss guidance."
+};
+
+const CDC_OLDER_ADULT_FOOD_SAFETY_SOURCE: ClaimSourceReference = {
+  title: "CDC: Safer Food Choices for Adults 65 and Older",
+  url: "https://www.cdc.gov/food-safety/foods/adults-65-older.html",
+  sourceType: "food-safety",
+  relevance: "Used when food advice targets older adults, who are at higher risk from foodborne illness."
+};
+
+const FOODSAFETY_OLDER_ADULT_SOURCE: ClaimSourceReference = {
+  title: "FoodSafety.gov: People at Risk - Older Adults",
+  url: "https://www.foodsafety.gov/people-at-risk/older-adults",
+  sourceType: "food-safety",
+  relevance: "Used to check whether posts include appropriate food-safety context for older adults."
+};
+
+const FDA_PRODUCE_SAFETY_SOURCE: ClaimSourceReference = {
+  title: "FDA: Selecting and Serving Produce Safely",
+  url: "https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-produce-safely",
+  sourceType: "food-safety",
+  relevance: "Used for raw fruit, vegetable, and produce handling claims."
+};
 
 interface TrustedSource {
   name: string;
@@ -1471,7 +1500,8 @@ function detectRapidWeightLossClaim(text: string): {
         "Evidence for calorie balance, broader diet, activity, or lifestyle context"
       ],
       guidanceComparison:
-        "General public-health guidance is closer to gradual weight loss around 1-2 lb per week, not a guaranteed single-food routine result."
+        "General public-health guidance is closer to gradual weight loss around 1-2 lb per week, not a guaranteed single-food routine result.",
+      sourceReferences: [CDC_WEIGHT_LOSS_SOURCE]
     }
   };
 }
@@ -1515,7 +1545,8 @@ function detectHighDoseSpinachRoutineConcern(text: string): {
         "Safety cautions for older adults, kidney stone risk, or medication interactions"
       ],
       guidanceComparison:
-        "CDC and NHLBI-style guidance emphasizes gradual weight loss around 1-2 lb per week through overall diet and activity, not a guaranteed single-food routine; kidney and medication guidance also cautions that spinach is high in oxalate and vitamin K."
+        "CDC-style guidance emphasizes gradual weight loss around 1-2 lb per week through overall diet and activity, not a guaranteed single-food routine; food-safety guidance also expects extra care when advice targets older adults.",
+      sourceReferences: [CDC_WEIGHT_LOSS_SOURCE, CDC_OLDER_ADULT_FOOD_SAFETY_SOURCE, FDA_PRODUCE_SAFETY_SOURCE]
     }
   };
 }
@@ -1559,7 +1590,8 @@ function detectRawMushroomElderlyHealthClaim(text: string): {
         "Evidence for the gut bacteria, enzyme, digestion, or bloating claims"
       ],
       guidanceComparison:
-        "Food-safety guidance treats older adults as higher risk for foodborne illness and emphasizes careful handling of raw foods; broad gut-health claims about raw mushrooms need credible nutrition evidence."
+        "Food-safety guidance treats older adults as higher risk for foodborne illness and emphasizes careful handling of raw foods; broad gut-health claims about raw mushrooms need credible nutrition evidence.",
+      sourceReferences: [CDC_OLDER_ADULT_FOOD_SAFETY_SOURCE, FOODSAFETY_OLDER_ADULT_SOURCE, FDA_PRODUCE_SAFETY_SOURCE]
     }
   };
 }
@@ -2543,7 +2575,30 @@ function sanitizeClaimDetails(details: ClaimDetail[] | undefined): ClaimDetail[]
       guidanceComparison:
         typeof detail.guidanceComparison === "string" && detail.guidanceComparison.trim()
           ? detail.guidanceComparison.slice(0, 500)
-          : undefined
+          : undefined,
+      sourceReferences: sanitizeClaimSourceReferences(detail.sourceReferences)
+    }));
+  return cleaned.length ? cleaned : undefined;
+}
+
+function sanitizeClaimSourceReferences(references: ClaimSourceReference[] | undefined): ClaimSourceReference[] | undefined {
+  if (!Array.isArray(references)) return undefined;
+  const cleaned = references
+    .filter(
+      (reference) =>
+        Boolean(reference) &&
+        typeof reference.title === "string" &&
+        typeof reference.url === "string" &&
+        /^https?:\/\//i.test(reference.url) &&
+        ["official", "medical", "government", "food-safety", "other"].includes(reference.sourceType) &&
+        typeof reference.relevance === "string"
+    )
+    .slice(0, 5)
+    .map((reference) => ({
+      title: reference.title.slice(0, 140),
+      url: reference.url.slice(0, 500),
+      sourceType: reference.sourceType,
+      relevance: reference.relevance.slice(0, 260)
     }));
   return cleaned.length ? cleaned : undefined;
 }
