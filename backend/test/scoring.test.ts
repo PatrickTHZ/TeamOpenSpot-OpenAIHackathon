@@ -590,6 +590,25 @@ describe("heuristicAssessment", () => {
     expect(result.requestedActions).toBeUndefined();
   });
 
+  it("does not treat music titles containing gel as health product claims", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Profile picture of lachy_mclean and 2 others",
+      visibleText:
+        "Profile picture of lachy_mclean and 2 others\nlachy_mclean and 2 others\nABBA · Angeleyes\nFollow\nAn uncle is the same as a parent right…? 🤔 …\nLike number is10169619. View likes\nComment number is13649. View comments\nReposted 142489 times\nReshare number is913980\nSave number is316597\nReel by lachy_mclean. Double tap to play or pause.",
+      screenshotOcrText:
+        "Visible image or video has no readable description.\nImage or video description: Like\nImage or video description: Comment\nImage or video description: Repost\nImage or video description: Share\nImage or video description: Save\nImage or video description: Audio",
+      visibleProfileSignals: ["App detected: Instagram", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: { description: "Visible image or video has no readable description." }
+    });
+
+    expect(result.riskLevel).toBe("low");
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.evidenceAgainst).toEqual([]);
+    expect(result.riskSignals?.some((signal) => signal.category === "claim-verification")).not.toBe(true);
+  });
+
   it("treats local incident retellings as ordinary stories when they do not ask the user to act", () => {
     const result = heuristicAssessment({
       client: "android",

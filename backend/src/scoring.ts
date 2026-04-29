@@ -1369,7 +1369,7 @@ function hasStrongContradictingRisk(signals: RiskSignal[], text: string): boolea
 function isHighImpactClaim(text: string): boolean {
   if (isGeneralNutritionWellnessAdvice(text)) return false;
   if (isPublicSafetyDirective(text)) return true;
-  return /cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(
+  return /\b(cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplements?|wellness|gel|skin|wrinkles?|forehead lines|anti-?aging|weight loss|diabetes|blood pressure)\b/.test(
     text
   );
 }
@@ -2194,7 +2194,7 @@ function imageEvidenceText(request: CredibilityAssessRequest): string {
 }
 
 function hasImageExtractedClaim(text: string): boolean {
-  const productOrHealth = /cure|medicine|wellness|supplement|gel|cream|serum|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure|detox|injections?/.test(text);
+  const productOrHealth = /\b(cure|medicine|wellness|supplements?|gel|cream|serum|skin|wrinkles?|forehead lines|anti-?aging|weight loss|diabetes|blood pressure|detox|injections?)\b/.test(text);
   const transformation = /before|after|after\s+\d+\s+(days?|weeks?|months?|years?)|changed my|shocking|tighter|softer|younger|refreshed|results?/.test(text);
   const namedProduct = /\b[A-Z]?[a-z]+(?:berry|gel|serum|cream|wellness|support)\b/i.test(text);
   return (productOrHealth && transformation) || (namedProduct && transformation);
