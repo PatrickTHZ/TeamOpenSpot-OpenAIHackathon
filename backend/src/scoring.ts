@@ -714,9 +714,7 @@ function assessSourceCredibility(
     scoreDelta += 10;
   }
 
-  const officialClaim =
-    /\b(official|government|bank|medicare|mygov|ato|police|council|emergency)\b/.test(text) ||
-    (/\bhealth\b/.test(text) && !isGeneralNutritionWellnessAdvice(text));
+  const officialClaim = /\b(official|government|bank|medicare|mygov|ato|police|council|emergency)\b/.test(text);
   if (
     officialClaim &&
     !trustedDomain &&
@@ -925,6 +923,12 @@ function assessScamLanguage(text: string): {
     { phrase: "claim your prize", weight: 14 },
     { phrase: "verify your account", weight: 14 },
     { phrase: "investment opportunity", weight: 14 },
+    { phrase: "retail investors", weight: 14 },
+    { phrase: "full watchlist", weight: 14 },
+    { phrase: "comment info", weight: 14 },
+    { phrase: "leave your number", weight: 16 },
+    { phrase: "mainstream media catches on", weight: 14 },
+    { phrase: "opportunity will be gone", weight: 14 },
     { phrase: "secret cure", weight: 18 },
     { phrase: "guaranteed", weight: 8 },
     { phrase: "they don't want you to know", weight: 12 },
@@ -1370,7 +1374,7 @@ function hasStrongContradictingRisk(signals: RiskSignal[], text: string): boolea
 function isHighImpactClaim(text: string): boolean {
   if (isGeneralNutritionWellnessAdvice(text)) return false;
   if (isPublicSafetyDirective(text)) return true;
-  return /\b(cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplements?|wellness|gel|skin|wrinkles?|forehead lines|anti-?aging|weight loss|diabetes|blood pressure)\b/.test(
+  return /\b(cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|investors?|stocks?|crypto|lawsuit|arrest|death|recall|supplements?|wellness|gel|skin|wrinkles?|forehead lines|anti-?aging|weight loss|diabetes|blood pressure)\b/.test(
     text
   );
 }
@@ -1529,7 +1533,7 @@ function isCommercialSocialPost(text: string): boolean {
 }
 
 function isEventTicketSalesPost(text: string): boolean {
-  return /\b(rave|concert|festival|gig|show|event|venue|dates? venues?|buy tickets?|ticket in bio|tickets? at|beacons\.ai|linktree|bio link)\b/i.test(
+  return /\b(rave|concert|festival|gig|venue|dates? venues?|buy tickets?|ticket in bio|tickets? at|beacons\.ai|linktree|bio link)\b/i.test(
     text
   );
 }
@@ -2327,7 +2331,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/\b(medicare number|tax file number|tfn|driver licence|passport|bank details|date of birth|address)\b/.test(text)) {
+  if (/\b(medicare number|tax file number|tfn|driver licence|passport|bank details|date of birth|address|leave your number|phone number)\b/.test(text)) {
     actions.push({
       action: "share_personal_info",
       risk: "high",

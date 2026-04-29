@@ -666,6 +666,29 @@ describe("heuristicAssessment", () => {
     expect(result.riskSignals?.some((signal) => signal.message.includes("Official-topic"))).not.toBe(true);
   });
 
+  it("flags private AI stock watchlist posts as investment scam bait", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Send post",
+      visibleText:
+        "health.que.en 🚨 I wasn't planning to share this, but after hearing this strategy from a senior chip industry insider at a private tech event, I had to tell people close to me. He said the biggest money in AI over the next 12 months won't come from the stocks everyone is already talking about — it'll come from a small group of overlooked suppliers most retail investors have never heard of. I followed this method myself and the early results have been unbelievable. If you want the full watchlist, comment INFO or click the link below and leave your number. I'll send the details privately before the mainstream media catches on. Don't wait too long. Once everyone finds out, the opportunity will be gone.",
+      screenshotOcrText:
+        "Image or video description: Photo by health.que.en, 0 likes\nImage or video description: health.que.en posted a photo 1 hour ago",
+      visibleProfileSignals: ["App detected: Instagram", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: { description: "Image or video description: Photo by health.que.en, 0 likes" }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.score).toBeLessThan(50);
+    expect(result.evidenceAgainst.join(" ")).toContain("urgency, pressure, or scam-like promises");
+    expect(result.missingSignals.join(" ")).not.toContain("event or ticket post");
+    expect(result.riskSignals?.some((signal) => signal.message.includes("leave your number"))).toBe(true);
+    expect(result.requestedActions?.map((action) => action.action)).toEqual(
+      expect.arrayContaining(["click_link", "share_personal_info"])
+    );
+  });
+
   it("treats local incident retellings as ordinary stories when they do not ask the user to act", () => {
     const result = heuristicAssessment({
       client: "android",
