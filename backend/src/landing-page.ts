@@ -20,6 +20,7 @@ export function landingPageHtml(): string {
         --teal: #66b7b8;
         --teal-dark: #3b9fa1;
         --lavender: #aaa2e6;
+        --gold: #d8a23e;
         --paper: #fbfaf7;
         --panel: #ffffff;
         --line: #e8e2da;
@@ -364,8 +365,10 @@ export function landingPageHtml(): string {
       }
 
       .demo-band {
-        padding: 76px 0 88px;
-        background: rgba(255, 255, 255, 0.48);
+        padding: 86px 0 98px;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(246, 245, 252, 0.72)),
+          rgba(255, 255, 255, 0.48);
         border-top: 1px solid var(--line);
       }
 
@@ -391,42 +394,271 @@ export function landingPageHtml(): string {
         line-height: 1.58;
       }
 
-      .demo-grid {
+      .interactive-demo {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 22px;
+        grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.58fr);
+        gap: 30px;
+        align-items: stretch;
       }
 
-      .demo-card {
+      .demo-stage {
+        position: relative;
+        min-height: 560px;
         overflow: hidden;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: var(--panel);
-        box-shadow: 0 18px 52px rgba(32, 40, 58, 0.08);
+        background:
+          radial-gradient(circle at 25% 16%, rgba(102, 183, 184, 0.2), transparent 24%),
+          radial-gradient(circle at 82% 22%, rgba(170, 162, 230, 0.24), transparent 28%),
+          #f8f7f3;
+        box-shadow: 0 28px 80px rgba(32, 40, 58, 0.12);
       }
 
-      .demo-card img {
+      .premium-phone {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: min(310px, calc(100% - 56px));
+        min-height: 500px;
+        border: 10px solid var(--ink);
+        border-radius: 38px;
+        background: #f7f6f2;
+        box-shadow: 0 34px 90px rgba(32, 40, 58, 0.2);
+        transform: translate(-50%, -50%);
+        overflow: hidden;
+      }
+
+      .premium-phone::before {
+        position: absolute;
+        top: 16px;
+        left: 50%;
+        width: 88px;
+        height: 6px;
+        border-radius: 999px;
+        background: #d8d4cd;
+        content: "";
+        transform: translateX(-50%);
+      }
+
+      .phone-screen {
+        padding: 56px 20px 20px;
+      }
+
+      .demo-feed {
+        display: grid;
+        gap: 14px;
+        transition: transform 420ms ease;
+      }
+
+      .demo-post {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+      }
+
+      .demo-post.active {
+        border-color: rgba(216, 162, 62, 0.55);
+        background: #fffaf0;
+      }
+
+      .post-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--teal), var(--lavender));
+      }
+
+      .post-lines {
+        display: grid;
+        gap: 8px;
+      }
+
+      .post-lines span {
         display: block;
-        width: 100%;
-        height: auto;
+        height: 9px;
+        border-radius: 999px;
+        background: #e4e0d8;
       }
 
-      .demo-copy {
-        padding: 18px 18px 20px;
+      .post-lines span:nth-child(2) {
+        width: 72%;
       }
 
-      .demo-copy h3 {
-        margin: 0 0 8px;
+      .trust-bubble {
+        position: absolute;
+        right: 22px;
+        bottom: 32px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 166px;
+        padding: 12px 15px;
+        border-radius: 999px;
+        color: #fff;
+        background: var(--ink);
+        box-shadow: 0 18px 42px rgba(32, 40, 58, 0.28);
+        font-size: 13px;
+        font-weight: 760;
+        transform: translateY(0);
+        transition: transform 320ms ease, background 320ms ease;
+      }
+
+      .trust-bubble i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--teal);
+        box-shadow: 0 0 0 8px rgba(102, 183, 184, 0.18);
+      }
+
+      .detail-sheet {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: 22px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 20px 54px rgba(32, 40, 58, 0.16);
+        transform: translateY(130%);
+        transition: transform 420ms ease;
+      }
+
+      .detail-sheet h3 {
+        margin: 0 0 12px;
         color: var(--ink);
-        font-size: 20px;
+        font-size: 22px;
         line-height: 1.2;
       }
 
-      .demo-copy p {
+      .detail-sheet ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .detail-sheet li {
+        display: grid;
+        grid-template-columns: 10px 1fr;
+        gap: 10px;
+        align-items: start;
+        margin-top: 10px;
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.38;
+      }
+
+      .detail-sheet li::before {
+        width: 10px;
+        height: 10px;
+        margin-top: 4px;
+        border-radius: 50%;
+        background: var(--teal);
+        content: "";
+      }
+
+      .demo-stage[data-state="scroll"] .demo-feed {
+        transform: translateY(-54px);
+      }
+
+      .demo-stage[data-state="scan"] .trust-bubble i,
+      .demo-stage[data-state="explain"] .trust-bubble i,
+      .demo-stage[data-state="source"] .trust-bubble i {
+        background: var(--gold);
+        box-shadow: 0 0 0 8px rgba(216, 162, 62, 0.18);
+      }
+
+      .demo-stage[data-state="explain"] .detail-sheet,
+      .demo-stage[data-state="source"] .detail-sheet {
+        transform: translateY(0);
+      }
+
+      .demo-stage[data-state="source"] .trust-bubble {
+        background: var(--teal-dark);
+      }
+
+      .control-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 18px 52px rgba(32, 40, 58, 0.08);
+        padding: 24px;
+      }
+
+      .control-panel h3 {
+        margin: 0 0 10px;
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.12;
+      }
+
+      .control-panel p {
         margin: 0;
         color: var(--ink-soft);
         font-size: 15px;
-        line-height: 1.55;
+        line-height: 1.58;
+      }
+
+      .state-buttons {
+        display: grid;
+        gap: 10px;
+        margin: 22px 0;
+      }
+
+      .state-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 760;
+        cursor: pointer;
+      }
+
+      .state-button.is-active {
+        color: #fff;
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+
+      .feature-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .feature-item {
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .feature-item strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--ink);
+        font-size: 15px;
+      }
+
+      .feature-item span {
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.5;
       }
 
       @media (max-width: 860px) {
@@ -468,7 +700,7 @@ export function landingPageHtml(): string {
         }
 
         .demo-head,
-        .demo-grid {
+        .interactive-demo {
           grid-template-columns: 1fr;
         }
       }
@@ -583,31 +815,117 @@ export function landingPageHtml(): string {
         </div>
       </section>
 
-      <section class="demo-band">
+      <section class="demo-band" id="demo">
         <div class="shell">
           <div class="demo-head">
             <h2>The app flow in motion.</h2>
-            <p>These prototype GIFs show the expected Android interaction: passive while scrolling, active after a pause, and plain-spoken when the user asks why.</p>
+            <p>Use the controls to move through the TrustLens interaction: passive while scrolling, active after a pause, and plain-spoken when the user asks why.</p>
           </div>
-          <div class="demo-grid">
-            <article class="demo-card">
-              <img src="/assets/trustlens-scan-flow.gif" alt="Mock TrustLens app scanning a visible feed after the user pauses." />
-              <div class="demo-copy">
-                <h3>Pause-to-scan bubble</h3>
-                <p>TrustLens waits during scrolling, then checks the visible post context and surfaces a compact risk label.</p>
+          <div class="interactive-demo">
+            <div class="demo-stage" data-state="scan" id="demo-stage" aria-label="Interactive TrustLens app mockup">
+              <div class="premium-phone">
+                <div class="phone-screen">
+                  <div class="demo-feed">
+                    <div class="demo-post">
+                      <div class="post-top"><span class="avatar"></span><div class="post-lines"><span></span><span></span></div></div>
+                      <div class="post-lines"><span></span><span></span><span></span></div>
+                    </div>
+                    <div class="demo-post active">
+                      <div class="post-top"><span class="avatar"></span><div class="post-lines"><span></span><span></span></div></div>
+                      <div class="post-lines"><span></span><span></span><span></span></div>
+                    </div>
+                    <div class="demo-post">
+                      <div class="post-top"><span class="avatar"></span><div class="post-lines"><span></span><span></span></div></div>
+                      <div class="post-lines"><span></span><span></span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="trust-bubble" id="demo-bubble"><i></i><span>Needs checking</span></div>
+                <div class="detail-sheet" id="demo-sheet">
+                  <h3 id="demo-sheet-title">Needs checking</h3>
+                  <ul id="demo-sheet-list">
+                    <li>Shortened link hides the destination.</li>
+                    <li>Urgent wording asks the user to act fast.</li>
+                    <li>No official source is visible yet.</li>
+                  </ul>
+                </div>
               </div>
-            </article>
-            <article class="demo-card">
-              <img src="/assets/trustlens-explain-panel.gif" alt="Mock TrustLens app showing a tapped explanation panel with risk reasons." />
-              <div class="demo-copy">
-                <h3>Tap for plain reasons</h3>
-                <p>The detail view explains link risk, urgency, missing evidence, and the safest next action before sharing.</p>
+            </div>
+            <aside class="control-panel">
+              <h3>Designed for a calm second opinion.</h3>
+              <p id="demo-description">After the user pauses, TrustLens checks the visible context and returns a risk label without turning the feed into a dashboard.</p>
+              <div class="state-buttons" aria-label="Demo states">
+                <button class="state-button" data-demo-state="scroll" type="button">Scroll passively <span>01</span></button>
+                <button class="state-button is-active" data-demo-state="scan" type="button">Pause scan <span>02</span></button>
+                <button class="state-button" data-demo-state="explain" type="button">Explain why <span>03</span></button>
+                <button class="state-button" data-demo-state="source" type="button">Check source <span>04</span></button>
               </div>
-            </article>
+              <div class="feature-list">
+                <div class="feature-item"><strong>Visible evidence only</strong><span>Text, links, OCR hints, page titles, and account signals stay tied to what the user can see.</span></div>
+                <div class="feature-item"><strong>Plain labels</strong><span>Low, medium, high, or cannot verify, with reasons that are easy to act on.</span></div>
+                <div class="feature-item"><strong>Docker-backed API</strong><span>The same TypeScript service powers the homepage and the assessment endpoint without route collisions.</span></div>
+              </div>
+            </aside>
           </div>
         </div>
       </section>
     </main>
+    <script>
+      const demoCopy = {
+        scroll: {
+          bubble: "Waiting",
+          title: "Still scrolling",
+          description: "TrustLens stays quiet while the user is actively moving through a feed, so it does not interrupt normal browsing.",
+          items: ["No capture while scrolling.", "The bubble remains passive.", "A pause starts the scan."]
+        },
+        scan: {
+          bubble: "Needs checking",
+          title: "Needs checking",
+          description: "After the user pauses, TrustLens checks the visible context and returns a risk label without turning the feed into a dashboard.",
+          items: ["Shortened link hides the destination.", "Urgent wording asks the user to act fast.", "No official source is visible yet."]
+        },
+        explain: {
+          bubble: "Tap for why",
+          title: "Why this needs care",
+          description: "The detail view explains the strongest signals in normal language, then gives a clear next step before the user shares.",
+          items: ["Link destination is unclear.", "The claim relies on pressure language.", "Open the original source first."]
+        },
+        source: {
+          bubble: "Source check",
+          title: "Source check queued",
+          description: "For deeper review, the app can ask the backend to compare visible claims against supplied links and optional web verification.",
+          items: ["Compare source domain with link text.", "Check if evidence supports the claim.", "Return uncertainty instead of guessing."]
+        }
+      };
+
+      const demoStage = document.getElementById("demo-stage");
+      const demoBubble = document.querySelector("#demo-bubble span");
+      const demoDescription = document.getElementById("demo-description");
+      const demoSheetTitle = document.getElementById("demo-sheet-title");
+      const demoSheetList = document.getElementById("demo-sheet-list");
+      const demoButtons = Array.from(document.querySelectorAll("[data-demo-state]"));
+
+      function setDemoState(state) {
+        const copy = demoCopy[state] || demoCopy.scan;
+        demoStage.dataset.state = state;
+        demoBubble.textContent = copy.bubble;
+        demoDescription.textContent = copy.description;
+        demoSheetTitle.textContent = copy.title;
+        demoSheetList.innerHTML = "";
+        copy.items.forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = item;
+          demoSheetList.appendChild(li);
+        });
+        demoButtons.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.demoState === state);
+        });
+      }
+
+      demoButtons.forEach((button) => {
+        button.addEventListener("click", () => setDemoState(button.dataset.demoState));
+      });
+    </script>
   </body>
 </html>`;
 }
