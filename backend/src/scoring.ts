@@ -7,6 +7,7 @@ import {
 import type {
   CredibilityAssessRequest,
   CredibilityAssessResponse,
+  AccountCredibility,
   PublicRiskSignal,
   RequestedAction,
   WebVerification
@@ -17,6 +18,7 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const ANALYSIS_VERSION = "risk-rules-2026-04-29.2";
 const MAX_TEXT_LENGTH = 6000;
 const MAX_LINKS = 16;
+const MAX_ACCOUNT_RECENT_POSTS = 5;
 const MAX_IMAGE_DATA_URL_LENGTH = 2_500_000;
 const MAX_IMAGE_BYTES = 1_800_000;
 const DEFAULT_OPENAI_TIMEOUT_MS = 2500;
@@ -27,6 +29,7 @@ const MAX_WEB_VERIFICATION_TIMEOUT_MS = 12000;
 interface RiskSignal {
   category:
     | "scam-language"
+    | "account-credibility"
     | "source-credibility"
     | "link-mismatch"
     | "claim-verification"
@@ -42,6 +45,7 @@ interface FastRiskAnalysis {
   evidenceAgainst: string[];
   missingSignals: string[];
   signals: RiskSignal[];
+  accountCredibility?: AccountCredibility;
 }
 
 export function validateAssessRequest(value: unknown): CredibilityAssessRequest {
@@ -90,6 +94,7 @@ export function validateAssessRequest(value: unknown): CredibilityAssessRequest 
       .map((item) => item.slice(0, 280));
   }
 
+  request.accountContext = parseAccountContext(input.accountContext);
   request.extractedLinks = parseLinkEvidence(input.extractedLinks);
   request.imageCrop = parseImageCropEvidence(input.imageCrop);
   if (input.consentToStoreEvidence === true) {
@@ -156,6 +161,7 @@ export function normalizeAssessment(raw: CredibilityAssessResponse): Credibility
       "Check the source and look for another reliable report before sharing.",
     riskSignals: sanitizeRiskSignals(raw.riskSignals),
     requestedActions: sanitizeRequestedActions(raw.requestedActions),
+    accountCredibility: sanitizeAccountCredibility(raw.accountCredibility),
     analysisVersion: raw.analysisVersion?.trim() || ANALYSIS_VERSION
   };
 }
@@ -179,6 +185,7 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
     recommendedAction: buildRecommendedAction(score, analysis),
     riskSignals: publicRiskSignals(analysis.signals),
     requestedActions: detectRequestedActions(request, analysis),
+    accountCredibility: analysis.accountCredibility,
     analysisVersion: ANALYSIS_VERSION
   });
 }
@@ -238,9 +245,10 @@ export async function assessCredibility(
           "You are a fast credibility risk assistant for elderly users.",
           "Start from the deterministic baseline assessment and improve it only when supplied evidence supports the change.",
           "Estimate risk from the supplied visible text, OCR text, extracted links, source/profile signals, and optional image crop.",
-          "Check exactly these categories: scam language, source credibility, link mismatch, claim verification, and AI-image suspicion.",
+          "Check exactly these categories: scam language, account credibility, source credibility, link mismatch, claim verification, and AI-image suspicion.",
           "Claim verification means checking whether the claim is supported by the provided source/domain/profile/text evidence. Do not browse the web.",
           "Source credibility means judging visible source signals, official-looking domains, known risky link patterns, and whether the source matches the claim type.",
+          "Account credibility means judging only supplied visible account context, such as profile URL, display name, joined-date text, verification signals, bio text, and recent visible post samples.",
           "Do not claim to verify private account creation dates unless they are supplied.",
           "If evidence is thin, use Cannot verify or Needs checking rather than guessing.",
           "Keep the explanation plain, calm, and short."
@@ -354,6 +362,13 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   missingSignals.push(...source.missingSignals);
   signals.push(...source.signals);
 
+  const account = assessAccountCredibility(request);
+  score += account.scoreDelta;
+  evidenceFor.push(...account.evidenceFor);
+  evidenceAgainst.push(...account.evidenceAgainst);
+  missingSignals.push(...account.missingSignals);
+  signals.push(...account.signals);
+
   const scam = assessScamLanguage(lowerText);
   score += scam.scoreDelta;
   evidenceAgainst.push(...scam.evidenceAgainst);
@@ -395,7 +410,8 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     evidenceFor: dedupe(evidenceFor).slice(0, 6),
     evidenceAgainst: dedupe(evidenceAgainst).slice(0, 6),
     missingSignals: dedupe(missingSignals).slice(0, 6),
-    signals
+    signals,
+    accountCredibility: account.accountCredibility
   };
 }
 
@@ -424,7 +440,19 @@ function assessSourceCredibility(
     scoreDelta -= 8;
   }
 
-  const profileText = (request.visibleProfileSignals || []).join(" ").toLowerCase();
+  const profileText = [
+    ...(request.visibleProfileSignals || []),
+    request.accountContext?.profileUrl,
+    request.accountContext?.displayName,
+    request.accountContext?.handle,
+    request.accountContext?.accountAgeText,
+    request.accountContext?.followerCountText,
+    request.accountContext?.friendCountText,
+    ...(request.accountContext?.verificationSignals || [])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   if (profileText) {
     evidenceFor.push("Some visible profile or account signals were captured.");
     scoreDelta += 3;
@@ -465,6 +493,146 @@ function assessSourceCredibility(
   }
 
   return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
+}
+
+function assessAccountCredibility(request: CredibilityAssessRequest): {
+  scoreDelta: number;
+  evidenceFor: string[];
+  evidenceAgainst: string[];
+  missingSignals: string[];
+  signals: RiskSignal[];
+  accountCredibility?: AccountCredibility;
+} {
+  const account = request.accountContext;
+  if (!account) {
+    return { scoreDelta: 0, evidenceFor: [], evidenceAgainst: [], missingSignals: [], signals: [] };
+  }
+
+  const evidenceFor: string[] = [];
+  const evidenceAgainst: string[] = [];
+  const missingSignals: string[] = [];
+  const signals: RiskSignal[] = [];
+  const accountFor: string[] = [];
+  const accountAgainst: string[] = [];
+  const accountMissing: string[] = [];
+  const text = accountText(account);
+  const lowerText = text.toLowerCase();
+  let scoreDelta = 0;
+  let accountScore = 50;
+
+  if (account.displayName || account.handle || account.profileUrl) {
+    accountFor.push("The poster account identity was captured.");
+    evidenceFor.push("The poster account identity was captured.");
+    accountScore += 4;
+    scoreDelta += 2;
+  } else {
+    accountMissing.push("No profile URL, display name, or handle was captured for the poster.");
+  }
+
+  if (hasAuthorMismatch(request)) {
+    const message = "The post author and captured profile identity do not clearly match.";
+    accountAgainst.push(message);
+    evidenceAgainst.push(message);
+    signals.push({
+      category: "account-credibility",
+      weight: 12,
+      message: "Post author and account context differ."
+    });
+    accountScore -= 14;
+    scoreDelta -= 10;
+  }
+
+  if (account.accountAgeText) {
+    if (/\b(joined|created|since|member since).*(20\d{2}|19\d{2})|\b(20\d{2}|19\d{2})\b|\b\d+\s+(years?|yrs?)\b/i.test(account.accountAgeText)) {
+      accountFor.push("The account appears to have visible age/history.");
+      evidenceFor.push("The account appears to have visible age/history.");
+      accountScore += 12;
+      scoreDelta += 5;
+    } else if (/\b(new|recent|joined today|joined this week|just joined)\b/i.test(account.accountAgeText)) {
+      const message = "The account appears new or recently created.";
+      accountAgainst.push(message);
+      evidenceAgainst.push(message);
+      signals.push({
+        category: "account-credibility",
+        weight: 12,
+        message: "New or recent account signal."
+      });
+      accountScore -= 16;
+      scoreDelta -= 8;
+    }
+  } else {
+    accountMissing.push("No account age or joined-date signal was captured.");
+    missingSignals.push("No account age or joined-date signal was captured.");
+  }
+
+  const verificationText = (account.verificationSignals || []).join(" ").toLowerCase();
+  if (/verified|official|blue tick|badge|meta verified/.test(verificationText)) {
+    accountFor.push("The profile has a visible verification or official signal.");
+    evidenceFor.push("The profile has a visible verification or official signal.");
+    accountScore += 12;
+    scoreDelta += 6;
+  }
+
+  if (account.followerCountText || account.friendCountText) {
+    accountFor.push("Follower or friend count context was captured.");
+    accountScore += 3;
+  } else {
+    accountMissing.push("Follower or friend count was not visible.");
+  }
+
+  const riskyAccountMatches = riskyAccountPatterns(lowerText);
+  if (riskyAccountMatches.length) {
+    const message = "The account profile or recent posts contain scam-like promotional patterns.";
+    accountAgainst.push(message);
+    evidenceAgainst.push(message);
+    signals.push({
+      category: "account-credibility",
+      weight: 16,
+      message: `Account history matched risky terms: ${riskyAccountMatches.slice(0, 3).join(", ")}.`
+    });
+    accountScore -= Math.min(30, riskyAccountMatches.length * 8);
+    scoreDelta -= Math.min(18, riskyAccountMatches.length * 6);
+  }
+
+  const recentPosts = account.recentPosts || [];
+  if (recentPosts.length >= 2) {
+    accountFor.push(`${recentPosts.length} recent visible post samples were supplied.`);
+    if (looksRepeatedPromo(recentPosts)) {
+      const message = "Recent visible posts look repetitive or promotional.";
+      accountAgainst.push(message);
+      evidenceAgainst.push(message);
+      signals.push({
+        category: "account-credibility",
+        weight: 12,
+        message: "Recent visible posts look repetitive or promotional."
+      });
+      accountScore -= 14;
+      scoreDelta -= 8;
+    } else if (!riskyAccountMatches.length) {
+      accountFor.push("Recent visible posts do not show repeated scam-like wording.");
+      accountScore += 6;
+      scoreDelta += 3;
+    }
+  } else {
+    accountMissing.push("Fewer than two recent visible posts were supplied for account-history checking.");
+    missingSignals.push("Fewer than two recent visible posts were supplied for account-history checking.");
+  }
+
+  const level = accountCredibilityLevel(accountScore, accountFor, accountAgainst);
+  return {
+    scoreDelta,
+    evidenceFor,
+    evidenceAgainst,
+    missingSignals,
+    signals,
+    accountCredibility: {
+      level,
+      summary: accountCredibilitySummary(level, accountAgainst, accountMissing),
+      signalsFor: dedupe(accountFor).slice(0, 6),
+      signalsAgainst: dedupe(accountAgainst).slice(0, 6),
+      missingSignals: dedupe(accountMissing).slice(0, 6)
+    }
+  };
 }
 
 function assessScamLanguage(text: string): {
@@ -661,7 +829,7 @@ function buildSummary(score: number, analysis: FastRiskAnalysis): string {
     return "This needs checking because the visible evidence is incomplete or only partly supported.";
   }
   const reason = analysis.evidenceAgainst[0] || "the visible evidence contains warning signs";
-  return `This looks risky because ${lowerFirst(reason)}.`;
+  return sentenceWithPeriod(`This looks risky because ${lowerFirst(reason)}`);
 }
 
 function buildAdvice(score: number, analysis: FastRiskAnalysis): string {
@@ -714,10 +882,78 @@ function allText(request: CredibilityAssessRequest): string {
     request.visibleText,
     request.screenshotOcrText,
     request.imageCrop?.description,
+    request.accountContext?.displayName,
+    request.accountContext?.handle,
+    request.accountContext?.bioText,
     ...(request.extractedLinks || []).flatMap((link) => [link.text, link.href])
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function parseAccountContext(value: unknown): CredibilityAssessRequest["accountContext"] {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Record<string, unknown>;
+  const account: NonNullable<CredibilityAssessRequest["accountContext"]> = {};
+
+  for (const key of [
+    "profileUrl",
+    "displayName",
+    "handle",
+    "bioText",
+    "accountAgeText",
+    "followerCountText",
+    "friendCountText",
+    "locationText"
+  ] as const) {
+    const item = input[key];
+    if (typeof item === "string" && item.trim()) {
+      account[key] = item.slice(0, key === "profileUrl" ? 2048 : 1000) as never;
+    }
+  }
+
+  if (Array.isArray(input.verificationSignals)) {
+    account.verificationSignals = input.verificationSignals
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .slice(0, 8)
+      .map((item) => item.slice(0, 240));
+  }
+
+  if (Array.isArray(input.recentPosts)) {
+    account.recentPosts = input.recentPosts
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      .slice(0, MAX_ACCOUNT_RECENT_POSTS)
+      .map((item) => ({
+        text: typeof item.text === "string" && item.text.trim() ? item.text.slice(0, 1000) : undefined,
+        url: typeof item.url === "string" && item.url.trim() ? item.url.slice(0, 2048) : undefined,
+        postedAtText:
+          typeof item.postedAtText === "string" && item.postedAtText.trim()
+            ? item.postedAtText.slice(0, 240)
+            : undefined,
+        reactionCountText:
+          typeof item.reactionCountText === "string" && item.reactionCountText.trim()
+            ? item.reactionCountText.slice(0, 120)
+            : undefined,
+        shareCountText:
+          typeof item.shareCountText === "string" && item.shareCountText.trim()
+            ? item.shareCountText.slice(0, 120)
+            : undefined
+      }))
+      .filter((item) => item.text || item.url || item.postedAtText);
+  }
+
+  return account.profileUrl ||
+    account.displayName ||
+    account.handle ||
+    account.bioText ||
+    account.accountAgeText ||
+    account.followerCountText ||
+    account.friendCountText ||
+    account.locationText ||
+    account.verificationSignals?.length ||
+    account.recentPosts?.length
+    ? account
+    : undefined;
 }
 
 function parseLinkEvidence(value: unknown): CredibilityAssessRequest["extractedLinks"] {
@@ -899,6 +1135,115 @@ function rootDomain(domain: string): string {
   return parts.slice(Math.max(0, parts.length - 2)).join(".");
 }
 
+function accountText(account: NonNullable<CredibilityAssessRequest["accountContext"]>): string {
+  return [
+    account.profileUrl,
+    account.displayName,
+    account.handle,
+    account.bioText,
+    account.accountAgeText,
+    account.followerCountText,
+    account.friendCountText,
+    account.locationText,
+    ...(account.verificationSignals || []),
+    ...(account.recentPosts || []).flatMap((post) => [
+      post.text,
+      post.url,
+      post.postedAtText,
+      post.reactionCountText,
+      post.shareCountText
+    ])
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function hasAuthorMismatch(request: CredibilityAssessRequest): boolean {
+  const author = normalizeIdentity(request.authorHandle || request.authorName || "");
+  const account = normalizeIdentity(
+    request.accountContext?.handle || request.accountContext?.displayName || ""
+  );
+  if (!author || !account) return false;
+  return !author.includes(account) && !account.includes(author);
+}
+
+function normalizeIdentity(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/^@/, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function riskyAccountPatterns(text: string): string[] {
+  const patterns = [
+    "claim your prize",
+    "crypto",
+    "bitcoin",
+    "investment",
+    "guaranteed returns",
+    "dm me",
+    "message me",
+    "whatsapp",
+    "telegram",
+    "secret cure",
+    "miracle cure",
+    "limited time",
+    "act now",
+    "before it disappears",
+    "doctors hate",
+    "they don't want you to know"
+  ];
+  return patterns.filter((pattern) => text.includes(pattern));
+}
+
+function looksRepeatedPromo(posts: NonNullable<CredibilityAssessRequest["accountContext"]>["recentPosts"]): boolean {
+  if (!posts || posts.length < 2) return false;
+  const promotionalPosts = posts.filter((post) =>
+    /\b(buy|sale|discount|limited time|dm me|message me|whatsapp|telegram|claim|prize|crypto|investment|miracle|secret)\b/i.test(
+      post.text || ""
+    )
+  );
+  if (promotionalPosts.length >= 2) return true;
+
+  const normalized = posts
+    .map((post) => (post.text || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/))
+    .filter((tokens) => tokens.length >= 5);
+  if (normalized.length < 2) return false;
+
+  const [first, ...rest] = normalized;
+  const firstSet = new Set(first);
+  return rest.some((tokens) => {
+    const overlap = tokens.filter((token) => token.length > 4 && firstSet.has(token)).length;
+    return overlap >= 4;
+  });
+}
+
+function accountCredibilityLevel(
+  score: number,
+  signalsFor: string[],
+  signalsAgainst: string[]
+): AccountCredibility["level"] {
+  if (!signalsFor.length && !signalsAgainst.length) return "unknown";
+  if (score >= 68) return "high";
+  if (score >= 45) return "medium";
+  return "low";
+}
+
+function accountCredibilitySummary(
+  level: AccountCredibility["level"],
+  signalsAgainst: string[],
+  missingSignals: string[]
+): string {
+  if (level === "high") return "The supplied profile signals look reasonably established.";
+  if (level === "low") {
+    return signalsAgainst[0] || "The supplied profile signals raise account credibility concerns.";
+  }
+  if (missingSignals.length) {
+    return "Some account details are visible, but more profile history would help confirm the poster.";
+  }
+  return "The supplied profile signals are mixed.";
+}
+
 function dedupe(items: string[]): string[] {
   return [...new Set(items.filter((item) => item.trim()).map((item) => item.trim()))];
 }
@@ -991,6 +1336,7 @@ function sanitizeRiskSignals(signals: PublicRiskSignal[] | undefined): PublicRis
       typeof signal.message === "string" &&
       [
         "scam-language",
+        "account-credibility",
         "source-credibility",
         "link-mismatch",
         "claim-verification",
@@ -1005,6 +1351,23 @@ function sanitizeRiskSignals(signals: PublicRiskSignal[] | undefined): PublicRis
       message: signal.message.slice(0, 240)
     }));
   return cleaned.length ? cleaned : undefined;
+}
+
+function sanitizeAccountCredibility(value: AccountCredibility | undefined): AccountCredibility | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const level = ["low", "medium", "high", "unknown"].includes(value.level) ? value.level : "unknown";
+  const summary =
+    typeof value.summary === "string" && value.summary.trim()
+      ? value.summary.slice(0, 500)
+      : "Account credibility could not be determined from the supplied evidence.";
+
+  return {
+    level,
+    summary,
+    signalsFor: sanitizeList(value.signalsFor),
+    signalsAgainst: sanitizeList(value.signalsAgainst),
+    missingSignals: sanitizeList(value.missingSignals)
+  };
 }
 
 function sanitizeRequestedActions(actions: RequestedAction[] | undefined): RequestedAction[] | undefined {
@@ -1047,6 +1410,10 @@ function lowerFirst(value: string): string {
   return value ? value.charAt(0).toLowerCase() + value.slice(1) : value;
 }
 
+function sentenceWithPeriod(value: string): string {
+  return /[.!?]$/.test(value) ? value : `${value}.`;
+}
+
 function mergeModelAssessment(
   baseline: CredibilityAssessResponse,
   model: CredibilityAssessResponse
@@ -1060,6 +1427,7 @@ function mergeModelAssessment(
     missingSignals: dedupe([...baseline.missingSignals, ...model.missingSignals]).slice(0, 6),
     riskSignals: model.riskSignals?.length ? model.riskSignals : baseline.riskSignals,
     requestedActions: model.requestedActions?.length ? model.requestedActions : baseline.requestedActions,
+    accountCredibility: model.accountCredibility || baseline.accountCredibility,
     analysisVersion: model.analysisVersion || baseline.analysisVersion || ANALYSIS_VERSION
   });
 }
@@ -1110,6 +1478,7 @@ async function maybeAddWebVerification(
                   screenshotOcrText: request.screenshotOcrText,
                   imageDescription: request.imageCrop?.description,
                   url: request.url,
+                  accountContext: request.accountContext,
                   extractedLinks: request.extractedLinks,
                   currentAssessment: {
                     label: assessment.label,

@@ -47,6 +47,8 @@ export function assessSchema() {
       authorName: "Visible source/account name",
       authorHandle: "Visible source/account handle",
       visibleProfileSignals: "Array of visible account/source signals",
+      accountContext:
+        "Optional deep profile context: { profileUrl?, displayName?, handle?, bioText?, accountAgeText?, followerCountText?, friendCountText?, verificationSignals?, recentPosts? }",
       extractedLinks: "Array of { text?, href, source? }",
       imageCrop: "Optional { dataUrl?, mediaType?, description?, crop? }",
       contentType: "post | article | reel | unknown",
@@ -70,6 +72,7 @@ export function assessSchema() {
       recommendedAction: "Short action CTA",
       riskSignals: "Category-level risk trace for frontend/debug use",
       requestedActions: "Detected actions the content asks the user to take",
+      accountCredibility: "Optional visible account-history credibility summary",
       analysisVersion: "Version of deterministic risk rules",
       webVerification: "Optional web source checking result when requested and enabled",
       evidenceId: "Only present when opt-in storage succeeds",

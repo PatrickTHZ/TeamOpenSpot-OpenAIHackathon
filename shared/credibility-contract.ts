@@ -16,6 +16,7 @@ export interface CredibilityAssessRequest {
   authorName?: string;
   authorHandle?: string;
   visibleProfileSignals?: string[];
+  accountContext?: AccountContext;
   selectedText?: string;
   locale?: string;
   screenshotOcrText?: string;
@@ -60,6 +61,7 @@ export interface CredibilityAssessResponse {
   recommendedAction: string;
   riskSignals?: PublicRiskSignal[];
   requestedActions?: RequestedAction[];
+  accountCredibility?: AccountCredibility;
   analysisVersion?: string;
   webVerification?: WebVerification;
   evidenceId?: string;
@@ -69,12 +71,42 @@ export interface CredibilityAssessResponse {
 export interface PublicRiskSignal {
   category:
     | "scam-language"
+    | "account-credibility"
     | "source-credibility"
     | "link-mismatch"
     | "claim-verification"
     | "ai-image-suspicion";
   severity: "low" | "medium" | "high";
   message: string;
+}
+
+export interface AccountContext {
+  profileUrl?: string;
+  displayName?: string;
+  handle?: string;
+  bioText?: string;
+  accountAgeText?: string;
+  followerCountText?: string;
+  friendCountText?: string;
+  locationText?: string;
+  verificationSignals?: string[];
+  recentPosts?: AccountPostEvidence[];
+}
+
+export interface AccountPostEvidence {
+  text?: string;
+  url?: string;
+  postedAtText?: string;
+  reactionCountText?: string;
+  shareCountText?: string;
+}
+
+export interface AccountCredibility {
+  level: "low" | "medium" | "high" | "unknown";
+  summary: string;
+  signalsFor: string[];
+  signalsAgainst: string[];
+  missingSignals: string[];
 }
 
 export interface RequestedAction {

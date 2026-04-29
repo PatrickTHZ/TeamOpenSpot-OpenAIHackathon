@@ -22,6 +22,7 @@ Base URLs:
 - Max request body defaults to `3,500,000` bytes.
 - Text fields are capped at `6000` chars.
 - `visibleProfileSignals` is capped at `12` items, `280` chars each.
+- `accountContext.recentPosts` is capped at `5` visible post samples, `1000` chars each.
 - `extractedLinks` is capped at `16` links.
 - `extractedLinks[].source` can be `visible`, `ocr`, `dom`, or `manual`.
 - `imageCrop.dataUrl` must be a PNG, JPEG, or WebP base64 data URL.
@@ -51,6 +52,25 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
   "authorName": "Example Support",
   "authorHandle": "@example-support",
   "visibleProfileSignals": ["posted 2h ago"],
+  "accountContext": {
+    "profileUrl": "https://www.facebook.com/example-support",
+    "displayName": "Example Support",
+    "handle": "@example-support",
+    "bioText": "Daily support and giveaways",
+    "accountAgeText": "Joined this week",
+    "followerCountText": "18 followers",
+    "verificationSignals": [],
+    "recentPosts": [
+      {
+        "text": "DM me to claim your prize before it disappears",
+        "postedAtText": "Yesterday"
+      },
+      {
+        "text": "Limited time account verification reward",
+        "postedAtText": "Today"
+      }
+    ]
+  },
   "extractedLinks": [
     {
       "text": "my.gov.au",
@@ -105,6 +125,16 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
       "advice": "Do not click the link. Type the official website address yourself."
     }
   ],
+  "accountCredibility": {
+    "level": "low",
+    "summary": "The account profile or recent posts contain scam-like promotional patterns.",
+    "signalsFor": ["The poster account identity was captured."],
+    "signalsAgainst": [
+      "The account appears new or recently created.",
+      "The account profile or recent posts contain scam-like promotional patterns."
+    ],
+    "missingSignals": ["Follower or friend count was not visible."]
+  },
   "analysisVersion": "risk-rules-2026-04-29.2",
   "webVerification": {
     "status": "checked",
@@ -136,6 +166,7 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
 | Need | Send these fields |
 | --- | --- |
 | Source identity | `authorName`, `authorHandle`, `visibleProfileSignals` |
+| Facebook account/poster credibility | `accountContext.profileUrl`, `accountContext.displayName`, `accountContext.handle`, `accountContext.accountAgeText`, `accountContext.verificationSignals`, `accountContext.recentPosts[]` |
 | Claim text | `visibleText`, `selectedText`, `screenshotOcrText` |
 | Link checking | `url`, `extractedLinks[].href`, `extractedLinks[].text` |
 | Image-dependent claims | `imageCrop.description`, `imageCrop.dataUrl`, `screenshotOcrText` |
@@ -144,6 +175,8 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
 ## Source And Claim Checking
 
 Source credibility is heuristic, not a live reputation lookup. It considers visible author/profile signals, official-looking domains, and risky domain patterns.
+
+For Facebook-style posts, the backend does not scrape private Facebook data. The client should capture visible public account evidence and send it as `accountContext`. The fast risk engine checks whether the displayed author matches the profile context, whether account age/history is visible, whether verification or official signals are present, and whether recent visible posts look repetitive, promotional, or scam-like. The response returns `accountCredibility` so the frontend can show who posted it and how much account evidence was available.
 
 Trusted examples include `.gov.au`, `.edu.au`, `.gov`, `.edu`, `.nhs.uk`, `abc.net.au`, `bbc.com`, `reuters.com`, `apnews.com`, `who.int`, and `bom.gov.au`.
 

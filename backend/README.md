@@ -67,6 +67,7 @@ Optional useful fields:
 - `authorName`
 - `authorHandle`
 - `visibleProfileSignals`
+- `accountContext`: optional visible poster profile details and recent visible post samples
 - `extractedLinks`: links from DOM, OCR, visible text, or manual selection
 - `imageCrop`: optional cropped screenshot data URL or description for OpenAI OCR/image-risk analysis
 - `consentToStoreEvidence`: must be `true` before self-host training evidence can be stored
@@ -124,6 +125,7 @@ Runtime knobs:
 The deterministic rules cover:
 
 - scam language: urgency, prizes, account verification, guaranteed cures, investment pressure
+- account credibility: poster/profile match, account age/history, verification hints, and recent visible post patterns
 - source credibility: visible author/profile signals, official-looking domains, suspicious domain patterns
 - link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
 - claim verification: whether high-impact claims have supplied trusted source evidence
@@ -180,6 +182,29 @@ Source credibility is a visible-evidence score, not a reputation database. It co
 - risky domain patterns such as shortened links, punycode, IP-address links, or login/verify/prize-style domains
 
 The frontend should capture as much source evidence as possible: page URL, post links, author name, author handle, verification badge text, account age text, and OCR text from screenshots.
+
+## Facebook Account Credibility
+
+The backend does not scrape Facebook or access private posts. For a deeper Facebook account check, the frontend should capture what is visible to the user and send `accountContext`:
+
+```json
+{
+  "accountContext": {
+    "profileUrl": "https://www.facebook.com/example",
+    "displayName": "Example Name",
+    "handle": "@example",
+    "bioText": "Visible bio text",
+    "accountAgeText": "Joined 2018",
+    "followerCountText": "4.2K followers",
+    "verificationSignals": ["verified badge visible"],
+    "recentPosts": [
+      { "text": "Visible recent post text", "postedAtText": "Yesterday" }
+    ]
+  }
+}
+```
+
+The response may include `accountCredibility` with `level`, `summary`, `signalsFor`, `signalsAgainst`, and `missingSignals`. This is designed for a "who posted this?" panel in the app.
 
 ## Evidence Storage For Training/QA
 

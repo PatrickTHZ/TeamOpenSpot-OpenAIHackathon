@@ -70,6 +70,13 @@ describe("validateAssessRequest", () => {
       client: "chrome",
       visibleText: "x".repeat(7000),
       visibleProfileSignals: Array.from({ length: 20 }, () => "y".repeat(400)),
+      accountContext: {
+        bioText: "b".repeat(1200),
+        recentPosts: Array.from({ length: 8 }, (_, index) => ({
+          text: "p".repeat(1200),
+          postedAtText: `post ${index}`
+        }))
+      },
       extractedLinks: Array.from({ length: 20 }, (_, index) => ({
         href: `https://example.com/${index}`,
         text: "z".repeat(800),
@@ -81,6 +88,9 @@ describe("validateAssessRequest", () => {
     expect(request.visibleText?.length).toBe(6000);
     expect(request.visibleProfileSignals).toHaveLength(12);
     expect(request.visibleProfileSignals?.[0]?.length).toBe(280);
+    expect(request.accountContext?.bioText?.length).toBe(1000);
+    expect(request.accountContext?.recentPosts).toHaveLength(5);
+    expect(request.accountContext?.recentPosts?.[0]?.text?.length).toBe(1000);
     expect(request.extractedLinks).toHaveLength(16);
     expect(request.extractedLinks?.[0]?.text?.length).toBe(500);
     expect(request.consentLabel?.length).toBe(200);
@@ -223,6 +233,52 @@ describe("heuristicAssessment", () => {
     expect(result.riskLevel).toBe("high");
     expect(result.evidenceAgainst.join(" ")).toContain("possible editing");
     expect(result.riskSignals?.some((signal) => signal.category === "ai-image-suspicion")).toBe(true);
+  });
+
+  it("deep-checks risky Facebook account context", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "This gel changed my aunt's face in 3 months before it disappears.",
+      authorName: "Marissa Lane",
+      accountContext: {
+        profileUrl: "https://www.facebook.com/sunberry-deals",
+        displayName: "SunBerry Deals",
+        accountAgeText: "Joined this week",
+        followerCountText: "18 followers",
+        recentPosts: [
+          { text: "DM me to claim your prize before it disappears", postedAtText: "Yesterday" },
+          { text: "Limited time miracle skin gel discount, message me", postedAtText: "Today" }
+        ]
+      }
+    });
+
+    expect(result.accountCredibility?.level).toBe("low");
+    expect(result.accountCredibility?.signalsAgainst.join(" ")).toContain("scam-like");
+    expect(result.riskSignals?.some((signal) => signal.category === "account-credibility")).toBe(true);
+  });
+
+  it("recognizes established supplied account context", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText: "The local council published evacuation routes for today.",
+      authorName: "Example Council",
+      authorHandle: "@examplecouncil",
+      accountContext: {
+        profileUrl: "https://www.facebook.com/examplecouncil",
+        displayName: "Example Council",
+        handle: "@examplecouncil",
+        accountAgeText: "Joined 2014",
+        followerCountText: "24K followers",
+        verificationSignals: ["verified badge visible"],
+        recentPosts: [
+          { text: "Road closure update for Main Street.", postedAtText: "Monday" },
+          { text: "Community library hours this weekend.", postedAtText: "Tuesday" }
+        ]
+      }
+    });
+
+    expect(result.accountCredibility?.level).toBe("high");
+    expect(result.accountCredibility?.signalsFor.join(" ")).toContain("visible age");
   });
 
   it("adds missing signal for image-dependent claims without OCR evidence", () => {
