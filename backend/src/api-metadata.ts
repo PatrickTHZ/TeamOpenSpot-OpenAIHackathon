@@ -2,12 +2,26 @@ import type { Env } from "./types";
 
 export const API_VERSION = "2026-04-29.2";
 
-export function publicRuntimeConfig(env: Pick<Env, "OPENAI_TIMEOUT_MS" | "OPENAI_ENABLE_VISION" | "MAX_REQUEST_BYTES" | "EVIDENCE_STORAGE_ENABLED">) {
+export function publicRuntimeConfig(
+  env: Pick<
+    Env,
+    | "OPENAI_TIMEOUT_MS"
+    | "OPENAI_ENABLE_VISION"
+    | "MAX_REQUEST_BYTES"
+    | "OCR_ENABLED"
+    | "OCR_ENGINE"
+    | "OCR_TIMEOUT_MS"
+    | "EVIDENCE_STORAGE_ENABLED"
+  >
+) {
   return {
     apiVersion: API_VERSION,
     openAiTimeoutMs: Number.parseInt(env.OPENAI_TIMEOUT_MS || "2500", 10),
     openAiVisionEnabled: env.OPENAI_ENABLE_VISION === "true",
     maxRequestBytes: Number.parseInt(env.MAX_REQUEST_BYTES || "3500000", 10),
+    ocrEnabled: env.OCR_ENABLED === "true",
+    ocrEngine: env.OCR_ENGINE || "tesseract",
+    ocrTimeoutMs: Number.parseInt(env.OCR_TIMEOUT_MS || "3000", 10),
     evidenceStorageEnabled: env.EVIDENCE_STORAGE_ENABLED === "true"
   };
 }

@@ -6,5 +6,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/selfhost.ts", "src/scoring.ts", "src/types.ts", "../shared"]
+  "include": ["src/selfhost.ts", "src/scoring.ts", "src/types.ts", "src/selfhost-ocr.ts", "src/selfhost-storage.ts", "../shared"]
 }

@@ -11,6 +11,10 @@ export interface Env {
   OPENAI_TIMEOUT_MS?: string;
   OPENAI_ENABLE_VISION?: string;
   MAX_REQUEST_BYTES?: string;
+  OCR_ENABLED?: string;
+  OCR_ENGINE?: string;
+  OCR_LANG?: string;
+  OCR_TIMEOUT_MS?: string;
   EVIDENCE_STORAGE_ENABLED?: string;
   EVIDENCE_STORAGE_DIR?: string;
   EVIDENCE_STORE_RAW_TEXT?: string;

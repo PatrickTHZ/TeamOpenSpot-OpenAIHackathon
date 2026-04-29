@@ -26,6 +26,8 @@ Base URLs:
 - `extractedLinks[].source` can be `visible`, `ocr`, `dom`, or `manual`.
 - `imageCrop.dataUrl` must be a PNG, JPEG, or WebP base64 data URL.
 - Decoded image crop bytes are capped at about `1.8MB`.
+- Docker/self-host can OCR `imageCrop.dataUrl` with Tesseract when `OCR_ENABLED=true`.
+- Cloudflare Worker does not run local OCR; send `screenshotOcrText` from the client or enable OpenAI vision.
 
 ## Minimal Request
 

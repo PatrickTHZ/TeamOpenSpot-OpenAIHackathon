@@ -114,6 +114,10 @@ Runtime knobs:
 - `OPENAI_TIMEOUT_MS`: defaults to `2500`; max `6000`.
 - `OPENAI_ENABLE_VISION`: defaults to `false`. Keep this off for fast demos unless the client sends small cropped images and you specifically want model vision.
 - `MAX_REQUEST_BYTES`: defaults to `3500000`.
+- `OCR_ENABLED`: defaults to `false`. Docker/self-host only; Cloudflare Worker does not run local OCR.
+- `OCR_ENGINE`: defaults to `tesseract`.
+- `OCR_LANG`: defaults to `eng`.
+- `OCR_TIMEOUT_MS`: defaults to `3000`; OCR failure does not fail assessment.
 
 The deterministic rules cover:
 
@@ -122,6 +126,19 @@ The deterministic rules cover:
 - link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
 - claim verification: whether high-impact claims have supplied trusted source evidence
 - AI-image suspicion: OCR/image descriptions that mention editing, deepfakes, manipulation, or sensational image claims
+
+## OCR
+
+The preferred fast path is still for Android/Chrome to send `screenshotOcrText` directly. The Docker self-host backend can also OCR `imageCrop.dataUrl` when enabled:
+
+```text
+OCR_ENABLED=true
+OCR_ENGINE=tesseract
+OCR_LANG=eng
+OCR_TIMEOUT_MS=3000
+```
+
+The Docker image installs system Tesseract. OCR is best-effort: if Tesseract is unavailable, slow, or cannot read the image, the API continues using the visible text, links, image description, and optional OpenAI refinement. Cloudflare Worker deployment does not run backend OCR.
 
 ## Claim Verification
 

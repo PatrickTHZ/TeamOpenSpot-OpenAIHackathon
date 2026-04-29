@@ -12,5 +12,6 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/index.ts", "src/scoring.ts", "src/contract.ts", "src/types.ts", "test", "../shared"]
+  "include": ["src/index.ts", "src/scoring.ts", "src/contract.ts", "src/types.ts", "test", "../shared"],
+  "exclude": ["test/selfhost-ocr.test.ts", "src/selfhost.ts", "src/selfhost-ocr.ts", "src/selfhost-storage.ts"]
 }

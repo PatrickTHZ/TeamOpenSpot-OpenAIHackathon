@@ -2,6 +2,8 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng
+
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=optional
 
@@ -15,6 +17,10 @@ ENV OPENAI_MODEL=gpt-5
 ENV OPENAI_TIMEOUT_MS=2500
 ENV OPENAI_ENABLE_VISION=false
 ENV MAX_REQUEST_BYTES=3500000
+ENV OCR_ENABLED=false
+ENV OCR_ENGINE=tesseract
+ENV OCR_LANG=eng
+ENV OCR_TIMEOUT_MS=3000
 ENV EVIDENCE_STORAGE_ENABLED=false
 ENV EVIDENCE_STORAGE_DIR=/data/evidence
 ENV EVIDENCE_STORE_RAW_TEXT=false

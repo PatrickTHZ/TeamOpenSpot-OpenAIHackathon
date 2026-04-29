@@ -6,6 +6,7 @@ import {
   heuristicAssessment,
   validateAssessRequest
 } from "./scoring.ts";
+import { enrichWithOcr } from "./selfhost-ocr.ts";
 import {
   canStoreEvidence,
   hasTrainingAccess,
@@ -21,6 +22,10 @@ interface SelfHostEnv {
   OPENAI_TIMEOUT_MS?: string;
   OPENAI_ENABLE_VISION?: string;
   MAX_REQUEST_BYTES?: string;
+  OCR_ENABLED?: string;
+  OCR_ENGINE?: string;
+  OCR_LANG?: string;
+  OCR_TIMEOUT_MS?: string;
   EVIDENCE_STORAGE_ENABLED?: string;
   EVIDENCE_STORAGE_DIR?: string;
   EVIDENCE_STORE_RAW_TEXT?: string;
@@ -46,6 +51,10 @@ const env: SelfHostEnv = {
   OPENAI_TIMEOUT_MS: process.env.OPENAI_TIMEOUT_MS,
   OPENAI_ENABLE_VISION: process.env.OPENAI_ENABLE_VISION,
   MAX_REQUEST_BYTES: process.env.MAX_REQUEST_BYTES,
+  OCR_ENABLED: process.env.OCR_ENABLED,
+  OCR_ENGINE: process.env.OCR_ENGINE,
+  OCR_LANG: process.env.OCR_LANG,
+  OCR_TIMEOUT_MS: process.env.OCR_TIMEOUT_MS,
   EVIDENCE_STORAGE_ENABLED: process.env.EVIDENCE_STORAGE_ENABLED,
   EVIDENCE_STORAGE_DIR: process.env.EVIDENCE_STORAGE_DIR,
   EVIDENCE_STORE_RAW_TEXT: process.env.EVIDENCE_STORE_RAW_TEXT,
@@ -132,7 +141,9 @@ const server = createServer(async (request, response) => {
     }
 
     const body = await readJsonBody(request, maxRequestBytes);
-    const assessmentRequest = validateAssessRequest(body);
+    let assessmentRequest = validateAssessRequest(body);
+    const ocr = await enrichWithOcr(assessmentRequest, env);
+    assessmentRequest = ocr.request;
     let assessment: Awaited<ReturnType<typeof assessCredibility>>;
 
     try {
@@ -161,6 +172,7 @@ const server = createServer(async (request, response) => {
         client: assessmentRequest.client,
         latencyMs: Date.now() - startedAt,
         band: assessment.band,
+        ocr: ocr.ocr ? "tesseract" : "skipped",
         evidenceStorage,
         errorCategory: null
       })

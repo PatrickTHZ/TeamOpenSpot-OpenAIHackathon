@@ -34,6 +34,10 @@ OPENAI_MODEL=gpt-5
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 MAX_REQUEST_BYTES=3500000
+OCR_ENABLED=false
+OCR_ENGINE=tesseract
+OCR_LANG=eng
+OCR_TIMEOUT_MS=3000
 CORS_ORIGIN=*
 EVIDENCE_STORAGE_ENABLED=false
 EVIDENCE_STORAGE_DIR=/data/evidence
@@ -85,6 +89,10 @@ OPENAI_MODEL=gpt-5
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 MAX_REQUEST_BYTES=3500000
+OCR_ENABLED=false
+OCR_ENGINE=tesseract
+OCR_LANG=eng
+OCR_TIMEOUT_MS=3000
 EVIDENCE_STORAGE_ENABLED=false
 EVIDENCE_STORAGE_DIR=/data/evidence
 EVIDENCE_STORE_RAW_TEXT=false
@@ -102,6 +110,7 @@ https://trustlens.z2hs.au/v1/assess
 
 - The Docker service uses the same scoring logic as the Cloudflare Worker.
 - If `OPENAI_API_KEY` is missing or OpenAI fails, the backend returns a local heuristic result.
+- Docker can run system Tesseract OCR for `imageCrop.dataUrl` when `OCR_ENABLED=true`; leave it off for fastest testing unless backend OCR is needed.
 - Evidence/image storage is disabled by default and requires both `EVIDENCE_STORAGE_ENABLED=true` and request-level `consentToStoreEvidence=true`.
 - The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount.
 - Runtime logs avoid raw post text and only include request ID, client, latency, band, and error category.
