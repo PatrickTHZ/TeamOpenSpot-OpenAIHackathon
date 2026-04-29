@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 
-export const API_VERSION = "2026-04-29.5";
+export const API_VERSION = "2026-04-29.6";
 
 export function publicRuntimeConfig(
   env: Pick<
@@ -13,6 +13,7 @@ export function publicRuntimeConfig(
     | "OCR_TIMEOUT_MS"
     | "WEB_VERIFICATION_ENABLED"
     | "WEB_VERIFICATION_TIMEOUT_MS"
+    | "AUTO_WEB_VERIFICATION_ENABLED"
     | "EVIDENCE_STORAGE_ENABLED"
   >
 ) {
@@ -25,6 +26,7 @@ export function publicRuntimeConfig(
     ocrEngine: env.OCR_ENGINE || "tesseract",
     ocrTimeoutMs: Number.parseInt(env.OCR_TIMEOUT_MS || "3000", 10),
     webVerificationEnabled: env.WEB_VERIFICATION_ENABLED === "true",
+    autoWebVerificationEnabled: env.AUTO_WEB_VERIFICATION_ENABLED !== "false",
     webVerificationTimeoutMs: Number.parseInt(env.WEB_VERIFICATION_TIMEOUT_MS || "6000", 10),
     evidenceStorageEnabled: env.EVIDENCE_STORAGE_ENABLED === "true"
   };

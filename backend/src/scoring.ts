@@ -374,12 +374,16 @@ export async function assessCredibility(
           "Use only the supplied evidence: visible text, selected text, OCR text, extracted links, source URL, author/account name, visible profile signals, account context, optional image description or image crop, and optional reverse image search matches.",
           "Do not browse the web. Do not invent account age, verification status, source reputation, image facts, or hidden context.",
           "Start from the deterministic baseline assessment and improve it only when supplied evidence supports the change.",
+          "Read visible text, selected text, OCR text, image description, account context, links, and reverse image matches together. Do not decide from a single keyword or one partial line.",
+          "When a capture includes adjacent feed items, share sheets, comments, or unrelated posts, identify the main post being checked from pageTitle, author/account, visible text order, image description, and selected/cropped evidence. Do not penalize the main post for unrelated neighboring feed text.",
           "Check exactly these categories: scam language, account credibility, source credibility, link mismatch, claim verification, and AI-image suspicion.",
           "Scam language means urgency, prizes, giveaways, miracle cures, investment pressure, threats, account verification, requests for codes, payment, downloads, personal details, or replies.",
           "Account credibility means judging only supplied visible account context, such as profile URL, display name, joined-date text, follower or friend count text, verification signals, bio text, and recent visible post samples.",
           "Source credibility means judging whether the author, account name, handle, source URL, visible profile signals, and domain look official, established, suspicious, mismatched, or missing.",
           "Link mismatch means visible link text differs from the real destination, or links use shorteners, lookalike domains, login/verify/prize wording, IP addresses, punycode, or unrelated domains.",
           "Claim verification means checking whether important claims are supported by the provided source/domain/profile/text evidence. Health, finance, emergency, legal, police, tax, government, recall, and safety claims need official or established source evidence.",
+          "For health, nutrition, diet, raw-food, supplement, or older-adult food advice, compare the claim against the provided clinical, nutrition, and food-safety context in claimDetails.sourceReferences when present. Unsupported daily routines, single-food routines, raw-food advice for older adults, or measurable health/weight-loss promises should stay high risk unless the supplied evidence clearly cites credible clinical, nutrition, or food-safety support.",
+          "Ordinary personal stories, jokes, opinions, hobby updates, and non-actionable retellings should be low risk unless they include a health, finance, emergency, legal, safety, scam, or click/purchase/personal-data claim.",
           "AI-image suspicion means checking OCR or image description for AI-generated, synthetic, edited, manipulated, deepfake, before/after transformation, sensational image claims, or staged/demo labels.",
           "Reverse image search matches can support image provenance when exact or near matches come from official, education, government, medical, or reputable news sources. They must not override unsupported health, finance, emergency, or scam claims.",
           "If evidence is thin, use Cannot verify or Needs checking rather than guessing.",
@@ -2741,8 +2745,10 @@ async function maybeAddWebVerification(
   request: CredibilityAssessRequest,
   env: Env
 ): Promise<CredibilityAssessResponse> {
+  const shouldVerify =
+    request.verificationMode === "web" || shouldAutoWebVerify(assessment, request, env);
   if (
-    request.verificationMode !== "web" ||
+    !shouldVerify ||
     env.WEB_VERIFICATION_ENABLED !== "true" ||
     !env.OPENAI_API_KEY
   ) {
@@ -2766,7 +2772,11 @@ async function maybeAddWebVerification(
         tools: [{ type: "web_search_preview" }],
         instructions: [
           "You verify public claims for a cautious misinformation-detection backend.",
-          "Search the web for independent support from official, medical, scientific, or reputable news sources.",
+          "Read the visible text, selected text, OCR text, image description, source URL, account context, extracted links, current assessment, and claim details together before searching.",
+          "Search the web for independent support from official, medical, scientific, food-safety, government, regulator, or reputable news sources.",
+          "For food and nutrition claims, prioritize official food-safety, public-health, clinical, dietitian, or government guidance over blogs, social posts, and sales pages.",
+          "For raw-food advice aimed at older adults, explicitly check older-adult food-safety guidance and whether the post includes appropriate safety context.",
+          "Ignore unrelated adjacent feed items unless they are clearly the post being assessed.",
           "Do not overstate certainty. If sources do not clearly support the claim, say not_found or mixed.",
           "Return only JSON matching this shape: {\"status\":\"checked\",\"summary\":\"...\",\"claims\":[{\"claim\":\"...\",\"verdict\":\"supported|unsupported|mixed|not_found\",\"explanation\":\"...\"}],\"sources\":[{\"title\":\"...\",\"url\":\"...\",\"sourceType\":\"official|news|medical|other\"}]}."
         ].join(" "),
@@ -2788,8 +2798,14 @@ async function maybeAddWebVerification(
                   currentAssessment: {
                     label: assessment.label,
                     riskLevel: assessment.riskLevel,
-                    why: assessment.why
-                  }
+                    why: assessment.why,
+                    claimDetails: assessment.claimDetails,
+                    evidenceAgainst: assessment.evidenceAgainst,
+                    missingSignals: assessment.missingSignals
+                  },
+                  preferredSourceReferences: assessment.claimDetails?.flatMap(
+                    (detail) => detail.sourceReferences || []
+                  )
                 })
               }
             ]
@@ -2804,10 +2820,10 @@ async function maybeAddWebVerification(
     const text = extractOutputText(payload);
     if (!text) return assessment;
 
-    return {
-      ...assessment,
-      webVerification: sanitizeWebVerification(JSON.parse(text) as WebVerification)
-    };
+    return applyWebVerificationToAssessment(
+      assessment,
+      sanitizeWebVerification(JSON.parse(text) as WebVerification)
+    );
   } catch {
     return {
       ...assessment,
@@ -2821,6 +2837,65 @@ async function maybeAddWebVerification(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function shouldAutoWebVerify(
+  assessment: CredibilityAssessResponse,
+  request: CredibilityAssessRequest,
+  env: Env
+): boolean {
+  if (env.AUTO_WEB_VERIFICATION_ENABLED === "false") return false;
+  if (request.verificationMode === "fast" && assessment.riskLevel !== "high") return false;
+  return Boolean(
+    assessment.claimDetails?.some(
+      (detail) =>
+        detail.status === "unsupported" &&
+        detail.severity === "high" &&
+        (detail.category === "health" || detail.category === "weight-loss" || detail.category === "product")
+    )
+  );
+}
+
+function applyWebVerificationToAssessment(
+  assessment: CredibilityAssessResponse,
+  webVerification: WebVerification
+): CredibilityAssessResponse {
+  if (webVerification.status !== "checked" || !webVerification.claims.length) {
+    return { ...assessment, webVerification };
+  }
+
+  const unsupported = webVerification.claims.filter((claim) =>
+    ["unsupported", "mixed", "not_found"].includes(claim.verdict)
+  );
+  const supported = webVerification.claims.filter((claim) => claim.verdict === "supported");
+  const hasHighUnsupportedClaim = assessment.claimDetails?.some(
+    (detail) => detail.status === "unsupported" && detail.severity === "high"
+  );
+  let score = assessment.score;
+  const evidenceFor = [...assessment.evidenceFor];
+  const evidenceAgainst = [...assessment.evidenceAgainst];
+  const missingSignals = [...assessment.missingSignals];
+
+  if (unsupported.length && hasHighUnsupportedClaim) {
+    score = Math.min(score, 45);
+    evidenceAgainst.unshift("Web verification did not find credible support for the high-risk health or food claim.");
+    missingSignals.unshift("Credible web sources did not clearly support the post's claim.");
+  } else if (supported.length && !unsupported.length) {
+    score = Math.min(95, score + 10);
+    evidenceFor.unshift("Web verification found credible sources supporting the main claim.");
+  }
+
+  return normalizeAssessment({
+    ...assessment,
+    score,
+    band: bandForScore(score),
+    riskLevel: riskLevelForScore(score),
+    label: labelForScore(score, assessment.confidence),
+    evidenceFor: dedupe(evidenceFor).slice(0, 6),
+    evidenceAgainst: dedupe(evidenceAgainst).slice(0, 6),
+    missingSignals: dedupe(missingSignals).slice(0, 6),
+    webVerification
+  });
 }
 
 function sanitizeWebVerification(value: WebVerification): WebVerification {

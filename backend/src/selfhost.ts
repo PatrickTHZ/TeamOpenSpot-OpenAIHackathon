@@ -30,6 +30,7 @@ interface SelfHostEnv {
   OCR_TIMEOUT_MS?: string;
   WEB_VERIFICATION_ENABLED?: string;
   WEB_VERIFICATION_TIMEOUT_MS?: string;
+  AUTO_WEB_VERIFICATION_ENABLED?: string;
   EVIDENCE_STORAGE_ENABLED?: string;
   EVIDENCE_STORAGE_DIR?: string;
   EVIDENCE_STORE_RAW_TEXT?: string;
@@ -63,6 +64,7 @@ const env: SelfHostEnv = {
   OCR_TIMEOUT_MS: process.env.OCR_TIMEOUT_MS,
   WEB_VERIFICATION_ENABLED: process.env.WEB_VERIFICATION_ENABLED,
   WEB_VERIFICATION_TIMEOUT_MS: process.env.WEB_VERIFICATION_TIMEOUT_MS,
+  AUTO_WEB_VERIFICATION_ENABLED: process.env.AUTO_WEB_VERIFICATION_ENABLED,
   EVIDENCE_STORAGE_ENABLED: process.env.EVIDENCE_STORAGE_ENABLED,
   EVIDENCE_STORAGE_DIR: process.env.EVIDENCE_STORAGE_DIR,
   EVIDENCE_STORE_RAW_TEXT: process.env.EVIDENCE_STORE_RAW_TEXT,
@@ -338,6 +340,9 @@ function logAssessmentResult(input: {
       openAiConfigured: Boolean(input.env.OPENAI_API_KEY),
       model: input.env.OPENAI_MODEL || "gpt-5.2",
       visionEnabled: input.env.OPENAI_ENABLE_VISION === "true",
+      webVerificationEnabled: input.env.WEB_VERIFICATION_ENABLED === "true",
+      autoWebVerificationEnabled: input.env.AUTO_WEB_VERIFICATION_ENABLED !== "false",
+      webVerification: assessment.webVerification?.status || "not_run",
       ocr: input.ocrEngine,
       evidenceStorage: input.evidenceStorage
     },
@@ -357,7 +362,8 @@ function logAssessmentResult(input: {
         riskSignals: assessment.riskSignals,
         requestedActions: assessment.requestedActions,
         accountCredibility: assessment.accountCredibility,
-        reverseImageSearch: assessment.reverseImageSearch
+        reverseImageSearch: assessment.reverseImageSearch,
+        webVerification: assessment.webVerification
       })
     );
     return;
@@ -375,14 +381,16 @@ function logAssessmentResult(input: {
         severity: detail.severity,
         claim: detail.claim,
         explanation: detail.explanation,
-        guidanceComparison: detail.guidanceComparison
+        guidanceComparison: detail.guidanceComparison,
+        sourceReferences: detail.sourceReferences
       })),
       riskSignals: assessment.riskSignals?.map((signal) => ({
         category: signal.category,
         severity: signal.severity,
         message: signal.message
       })),
-      reverseImageSearch: assessment.reverseImageSearch
+      reverseImageSearch: assessment.reverseImageSearch,
+      webVerification: assessment.webVerification
     })
   );
 }
