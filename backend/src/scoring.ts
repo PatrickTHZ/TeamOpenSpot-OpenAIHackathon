@@ -901,6 +901,16 @@ function hasPositiveTrustSignal(text: string): boolean {
   return /\bbadge\b/.test(trimmed) && !/\b(no|not|without|missing|absent)\s+(?:visible\s+)?badge\b/.test(trimmed);
 }
 
+function hasVerifiedAccountContext(request: CredibilityAssessRequest): boolean {
+  const verificationText = [
+    ...(request.accountContext?.verificationSignals || []),
+    ...(request.visibleProfileSignals || [])
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return hasPositiveTrustSignal(verificationText);
+}
+
 function assessScamLanguage(text: string): {
   scoreDelta: number;
   evidenceAgainst: string[];
@@ -1030,9 +1040,12 @@ function assessClaimSupport(
   const trustedDomain = domains.some(isTrustedDomain);
   const trustedSource = trustedSourceFromEvidence(request, domains);
   const institutionalContext = isInstitutionalSourceContext(request, text);
-  const trustedSupport = trustedDomain || institutionalContext || Boolean(trustedSource && !hasImageManipulationCue(imageText));
+  const verifiedAccountContext = hasVerifiedAccountContext(request);
+  const trustedSupport =
+    trustedDomain || institutionalContext || verifiedAccountContext || Boolean(trustedSource && !hasImageManipulationCue(imageText));
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
   const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
+  const eventTicketSalesPost = isEventTicketSalesPost(text);
 
   if (highImpact && trustedSupport) {
     evidenceFor.push(
@@ -1053,6 +1066,18 @@ function assessClaimSupport(
       message: rapidWeightLossClaim.signalMessage
     });
     scoreDelta -= 18;
+  }
+
+  if (eventTicketSalesPost && !highImpact && !trustedSupport) {
+    missingSignals.push(
+      "This looks like an event or ticket post using a bio/link page, so confirm the organizer, venue, or ticket seller before buying."
+    );
+    signals.push({
+      category: "source-credibility",
+      weight: 4,
+      message: "Event or ticket link should be checked against the organizer or venue."
+    });
+    scoreDelta -= 2;
   }
 
   if (highImpact && !trustedSupport) {
@@ -1433,7 +1458,7 @@ function isPlatformUiTitle(value: string): boolean {
 }
 
 function isInstitutionalSourceContext(request: CredibilityAssessRequest, text: string): boolean {
-  const sourceText = `${request.authorName || ""} ${request.authorHandle || ""} ${request.pageTitle || ""} ${text}`;
+  const sourceText = `${request.authorName || ""} ${request.authorHandle || ""} ${request.pageTitle || ""} ${primaryVisiblePostText(request) || text.slice(0, 700)}`;
   return /\b(uts: university of technology sydney|university of technology sydney|transport for nsw|fair work ombuds(?:man)?|adf careers|amazon web services|chatgpt|openai|chp\s*-\s*[a-z][a-z\s-]+|california highway patrol)\b/i.test(
     sourceText
   );
@@ -1441,6 +1466,12 @@ function isInstitutionalSourceContext(request: CredibilityAssessRequest, text: s
 
 function isCommercialSocialPost(text: string): boolean {
   return /\b(sponsored|sign up|buy tickets?|ticket in bio|link in bio|shared link|go to [a-z0-9.-]+\.[a-z]{2,}|learn how to|try .+ now|join|register|sale|discount)\b/i.test(
+    text
+  );
+}
+
+function isEventTicketSalesPost(text: string): boolean {
+  return /\b(rave|concert|festival|gig|show|event|venue|dates? venues?|buy tickets?|ticket in bio|tickets? at|beacons\.ai|linktree|bio link)\b/i.test(
     text
   );
 }
@@ -1624,6 +1655,13 @@ function allText(request: CredibilityAssessRequest): string {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function primaryVisiblePostText(request: CredibilityAssessRequest): string {
+  const visible = request.visibleText || request.selectedText || "";
+  if (!visible.trim()) return "";
+  const beforeUi = visible.split(/\n(?:Like button|Comment|Share button|Send|Post Menu)\b/i)[0]?.trim();
+  return beforeUi || visible.slice(0, 700).trim();
 }
 
 function parseAccountContext(value: unknown): CredibilityAssessRequest["accountContext"] {
@@ -2146,7 +2184,7 @@ function detectRequestedActions(
   const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
   const trustedInstitutionalAction =
     analysis.score >= 75 &&
-    isInstitutionalSourceContext(request, text) &&
+    (isInstitutionalSourceContext(request, text) || hasVerifiedAccountContext(request)) &&
     !analysis.signals.some((signal) => signal.category === "link-mismatch" || signal.weight >= 14);
   const benignSearchResult = isBenignSearchResultViewer(request, text, analysis.signals);
   const explicitClickRequest =

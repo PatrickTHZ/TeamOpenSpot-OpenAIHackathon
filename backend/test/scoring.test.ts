@@ -525,6 +525,53 @@ describe("heuristicAssessment", () => {
     expect(result.score).toBeGreaterThanOrEqual(60);
   });
 
+  it("treats event ticket bio links as commercial links to check, not high-impact claims", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Shared Link: beacons.ai, @cosraves | FORT WORTH - FIVE NIGHTS AT FREDDY'S | Beacons",
+      visibleText:
+        "Shared Link: beacons.ai, @cosraves | FORT WORTH - FIVE NIGHTS AT FREDDY'S | Beacons\n@cosraves | FORT WORTH - FIVE NIGHTS AT FREDDY'S | Beacons\nBuy tickets\nLike button. Double tap and hold to react to the comment.\nComment\nShare button. Double tap to share the post.\nFair Work Ombudsman\nCan you actually be on call when you're on annual leave?",
+      screenshotOcrText:
+        "Image or video description: Image\nImage or video description: Fair Work Ombudsman Profile picture",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "Image or video description: Image" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(50);
+    expect(result.riskLevel).toBe("medium");
+    expect(result.evidenceAgainst).toEqual([]);
+    expect(result.why.join(" ")).toContain("event or ticket post");
+    expect(result.requestedActions?.[0]).toMatchObject({
+      action: "click_link",
+      risk: "medium"
+    });
+  });
+
+  it("allows verified event accounts to lower normal ticket-link action risk", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Cosraves",
+      visibleText:
+        "Cosraves\nSponsored\nHATSUNE MIKU RAVE TO A CITY NEAR YOU\nDATES VENUES & TICKET IN BIO LINK\nBuy tickets",
+      visibleProfileSignals: ["App detected: Facebook"],
+      accountContext: {
+        displayName: "Cosraves",
+        handle: "cosraves",
+        verificationSignals: ["verified badge visible"]
+      },
+      imageCrop: { description: "Image or video description: Image" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.riskLevel).toBe("low");
+    expect(result.requestedActions?.[0]).toMatchObject({
+      action: "click_link",
+      risk: "low"
+    });
+  });
+
   it("treats official public-safety Facebook posts as credible enough to check, not automatically suspicious", () => {
     const result = heuristicAssessment({
       client: "android",
