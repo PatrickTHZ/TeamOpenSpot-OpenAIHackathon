@@ -6,6 +6,7 @@ This workspace contains a split prototype for a social media/news credibility he
 - `shared/` - API contract shared by both clients.
 - `TEAM_PLAN.md` - 4-person split: 2 frontend roles and 2 backend roles.
 - `deploy/truenas/` - Docker Compose self-hosting plan for `trustlens.z2hs.au:5072`.
+- `docs/API.md` - API variables, examples, source checking, and storage reference.
 
 Per the current handoff scope, this repo stops after the shared contract and backend. The Chrome extension and Android app can be implemented next against the stable `/v1/assess` contract below.
 
@@ -83,6 +84,8 @@ npx wrangler secret put OPENAI_API_KEY
 ## API Contract
 
 `POST /v1/assess`
+
+Full API reference: [docs/API.md](docs/API.md)
 
 Example request:
 

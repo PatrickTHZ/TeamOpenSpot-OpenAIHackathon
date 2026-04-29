@@ -43,12 +43,23 @@ npx wrangler secret put OPENAI_API_KEY
 
 Returns a small health payload for Docker, reverse proxies, and smoke tests.
 
+`GET /v1/schema`
+
+Returns a machine-readable summary of request fields, response fields, and public runtime limits.
+
 `POST /v1/assess`
 
 Required:
 
 - `client`: `android` or `chrome`
 - At least one of `visibleText`, `selectedText`, `screenshotOcrText`, `extractedLinks`, `imageCrop`, or `url`
+
+Request rules:
+
+- `Content-Type` must be `application/json`.
+- Request body max defaults to `3,500,000` bytes.
+- `imageCrop.dataUrl` must be PNG/JPEG/WebP base64 and decoded image bytes must be under about `1.8MB`.
+- Invalid `contentType` values are ignored.
 
 Optional useful fields:
 
@@ -167,4 +178,12 @@ GET /v1/evidence
 GET /v1/evidence/{evidenceId}
 GET /v1/evidence/{evidenceId}/image
 Authorization: Bearer <EVIDENCE_ADMIN_TOKEN>
+```
+
+Examples:
+
+```sh
+curl -H "Authorization: Bearer $EVIDENCE_ADMIN_TOKEN" http://localhost:5072/v1/evidence
+curl -H "Authorization: Bearer $EVIDENCE_ADMIN_TOKEN" http://localhost:5072/v1/evidence/<id>
+curl -H "Authorization: Bearer $EVIDENCE_ADMIN_TOKEN" http://localhost:5072/v1/evidence/<id>/image --output crop.png
 ```

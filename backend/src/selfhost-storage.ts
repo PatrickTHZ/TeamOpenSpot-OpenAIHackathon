@@ -122,7 +122,7 @@ export async function listEvidence(env: EvidenceStorageEnv): Promise<StoredEvide
   await mkdir(root, { recursive: true });
   const ids = await readdir(root);
   const records: Array<StoredEvidenceSummary | null> = await Promise.all(
-    ids.slice(-MAX_RECORDS).map(async (id) => {
+    ids.map(async (id) => {
       try {
         const record = JSON.parse(await readFile(join(root, id, "record.json"), "utf8")) as StoredEvidenceRecord;
         const summary: StoredEvidenceSummary = {
@@ -143,7 +143,8 @@ export async function listEvidence(env: EvidenceStorageEnv): Promise<StoredEvide
 
   return records
     .filter((record): record is StoredEvidenceSummary => record !== null)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, MAX_RECORDS);
 }
 
 export async function readEvidence(id: string, env: EvidenceStorageEnv): Promise<StoredEvidenceRecord | null> {

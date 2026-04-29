@@ -60,13 +60,21 @@ export function validateAssessRequest(value: unknown): CredibilityAssessRequest 
     "authorHandle",
     "selectedText",
     "locale",
-    "screenshotOcrText",
-    "contentType"
+    "screenshotOcrText"
   ] as const) {
     const item = input[key];
     if (typeof item === "string" && item.trim()) {
       request[key] = item.slice(0, MAX_TEXT_LENGTH) as never;
     }
+  }
+
+  if (
+    input.contentType === "post" ||
+    input.contentType === "article" ||
+    input.contentType === "reel" ||
+    input.contentType === "unknown"
+  ) {
+    request.contentType = input.contentType;
   }
 
   if (Array.isArray(input.visibleProfileSignals)) {

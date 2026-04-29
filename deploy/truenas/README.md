@@ -68,6 +68,13 @@ trustlens.z2hs.au -> http://172.20.20.251:5072
 
 Use HTTPS at the reverse proxy layer. Keep the container on plain HTTP internally.
 
+Reverse proxy requirements:
+
+- Preserve the request path, for example `/v1/assess` must reach `/v1/assess`.
+- Allow `GET`, `POST`, and `OPTIONS`.
+- Forward the `Authorization` header for protected evidence endpoints.
+- Keep TLS termination at the proxy layer.
+
 ## API Keys
 
 API keys are loaded from `.env` for speed and simple TrueNAS setup:
@@ -96,4 +103,5 @@ https://trustlens.z2hs.au/v1/assess
 - The Docker service uses the same scoring logic as the Cloudflare Worker.
 - If `OPENAI_API_KEY` is missing or OpenAI fails, the backend returns a local heuristic result.
 - Evidence/image storage is disabled by default and requires both `EVIDENCE_STORAGE_ENABLED=true` and request-level `consentToStoreEvidence=true`.
+- The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount.
 - Runtime logs avoid raw post text and only include request ID, client, latency, band, and error category.

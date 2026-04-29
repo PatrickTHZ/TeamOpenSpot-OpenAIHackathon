@@ -1,5 +1,11 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { API_VERSION, assessSchema, publicRuntimeConfig } from "./api-metadata.ts";
+import {
+  assessCredibility,
+  heuristicAssessment,
+  validateAssessRequest
+} from "./scoring.ts";
 import {
   canStoreEvidence,
   hasTrainingAccess,
@@ -14,6 +20,7 @@ interface SelfHostEnv {
   OPENAI_MODEL?: string;
   OPENAI_TIMEOUT_MS?: string;
   OPENAI_ENABLE_VISION?: string;
+  MAX_REQUEST_BYTES?: string;
   EVIDENCE_STORAGE_ENABLED?: string;
   EVIDENCE_STORAGE_DIR?: string;
   EVIDENCE_STORE_RAW_TEXT?: string;
@@ -21,8 +28,6 @@ interface SelfHostEnv {
   EVIDENCE_ADMIN_TOKEN?: string;
   TRAINING_ACCESS_TOKEN?: string;
 }
-
-type ScoringModule = typeof import("./scoring.ts");
 
 const port = Number.parseInt(process.env.PORT || "5072", 10);
 const host = process.env.HOST || "0.0.0.0";
@@ -40,6 +45,7 @@ const env: SelfHostEnv = {
   OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-5",
   OPENAI_TIMEOUT_MS: process.env.OPENAI_TIMEOUT_MS,
   OPENAI_ENABLE_VISION: process.env.OPENAI_ENABLE_VISION,
+  MAX_REQUEST_BYTES: process.env.MAX_REQUEST_BYTES,
   EVIDENCE_STORAGE_ENABLED: process.env.EVIDENCE_STORAGE_ENABLED,
   EVIDENCE_STORAGE_DIR: process.env.EVIDENCE_STORAGE_DIR,
   EVIDENCE_STORE_RAW_TEXT: process.env.EVIDENCE_STORE_RAW_TEXT,
@@ -54,7 +60,7 @@ const server = createServer(async (request, response) => {
 
   try {
     if (request.method === "OPTIONS") {
-      writeJson(response, 204, null);
+      writeJson(response, 204, null, requestId);
       return;
     }
 
@@ -63,31 +69,41 @@ const server = createServer(async (request, response) => {
       writeJson(response, 200, {
         ok: true,
         service: "trustlens-backend",
-        endpoints: ["/v1/assess", "/v1/evidence"]
-      });
+        apiVersion: API_VERSION,
+        endpoints: ["/v1/assess", "/v1/schema", "/v1/evidence"],
+        config: publicRuntimeConfig(env)
+      }, requestId);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/schema") {
+      writeJson(response, 200, {
+        ...assessSchema(),
+        config: publicRuntimeConfig(env)
+      }, requestId);
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/v1/evidence") {
       if (!hasTrainingAccess(request.headers.authorization, env)) {
-        writeJson(response, 401, { error: "Training access token required.", requestId });
+        writeJson(response, 401, { error: "Training access token required.", requestId }, requestId);
         return;
       }
-      writeJson(response, 200, { items: await listEvidence(env) });
+      writeJson(response, 200, { items: await listEvidence(env) }, requestId);
       return;
     }
 
     const evidenceMatch = url.pathname.match(/^\/v1\/evidence\/([^/]+)(?:\/(?:image|crop))?$/);
     if (request.method === "GET" && evidenceMatch) {
       if (!hasTrainingAccess(request.headers.authorization, env)) {
-        writeJson(response, 401, { error: "Training access token required.", requestId });
+        writeJson(response, 401, { error: "Training access token required.", requestId }, requestId);
         return;
       }
 
       if (url.pathname.endsWith("/image")) {
         const image = await readEvidenceImage(evidenceMatch[1], env);
         if (!image) {
-          writeJson(response, 404, { error: "Image not found.", requestId });
+          writeJson(response, 404, { error: "Image not found.", requestId }, requestId);
           return;
         }
         writeBytes(response, 200, image.bytes, image.contentType);
@@ -95,28 +111,27 @@ const server = createServer(async (request, response) => {
       }
 
       const evidence = await readEvidence(evidenceMatch[1], env);
-      writeJson(response, evidence ? 200 : 404, evidence || { error: "Evidence not found.", requestId });
+      writeJson(response, evidence ? 200 : 404, evidence || { error: "Evidence not found.", requestId }, requestId);
       return;
     }
 
     if (request.method !== "POST" || url.pathname !== "/v1/assess") {
-      writeJson(response, 404, { error: "Not found", requestId });
+      writeJson(response, 404, { error: "Not found", requestId }, requestId);
       return;
     }
 
     if (!request.headers["content-type"]?.toLowerCase().includes("application/json")) {
-      writeJson(response, 400, { error: "Content-Type must be application/json.", requestId });
+      writeJson(response, 400, { error: "Content-Type must be application/json.", requestId }, requestId);
       return;
     }
 
     const contentLength = Number.parseInt(request.headers["content-length"] || "0", 10);
     if (contentLength > maxRequestBytes) {
-      writeJson(response, 413, { error: "Request body too large.", requestId });
+      writeJson(response, 413, { error: "Request body too large.", requestId }, requestId);
       return;
     }
 
     const body = await readJsonBody(request, maxRequestBytes);
-    const { assessCredibility, heuristicAssessment, validateAssessRequest } = await loadScoring();
     const assessmentRequest = validateAssessRequest(body);
     let assessment: Awaited<ReturnType<typeof assessCredibility>>;
 
@@ -126,12 +141,18 @@ const server = createServer(async (request, response) => {
       assessment = heuristicAssessment(assessmentRequest);
     }
 
+    let evidenceStorage: "skipped" | "saved" | "failed" = "skipped";
     if (canStoreEvidence(assessmentRequest, env)) {
-      const storage = await storeEvidence(assessmentRequest, assessment, env);
-      assessment = {
-        ...assessment,
-        ...storage
-      };
+      try {
+        const storage = await storeEvidence(assessmentRequest, assessment, env);
+        assessment = {
+          ...assessment,
+          ...storage
+        };
+        evidenceStorage = "saved";
+      } catch {
+        evidenceStorage = "failed";
+      }
     }
 
     console.log(
@@ -140,11 +161,12 @@ const server = createServer(async (request, response) => {
         client: assessmentRequest.client,
         latencyMs: Date.now() - startedAt,
         band: assessment.band,
+        evidenceStorage,
         errorCategory: null
       })
     );
 
-    writeJson(response, 200, assessment);
+    writeJson(response, 200, assessment, requestId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.log(
@@ -166,7 +188,7 @@ const server = createServer(async (request, response) => {
     writeJson(response, status, {
       error: message,
       requestId
-    });
+    }, requestId);
   }
 });
 
@@ -174,9 +196,10 @@ server.listen(port, host, () => {
   console.log(`TrustLens backend listening on http://${host}:${port}`);
 });
 
-function writeJson(response: ServerResponse, status: number, value: unknown): void {
+function writeJson(response: ServerResponse, status: number, value: unknown, requestId?: string): void {
   response.writeHead(status, {
     ...corsHeaders,
+    ...(requestId ? { "X-Request-Id": requestId } : {}),
     "Content-Type": "application/json",
     "Cache-Control": "no-store"
   });
@@ -214,6 +237,3 @@ async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise
   }
 }
 
-function loadScoring(): Promise<ScoringModule> {
-  return import("./scoring.ts");
-}
