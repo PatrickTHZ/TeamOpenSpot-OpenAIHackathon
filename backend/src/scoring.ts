@@ -595,8 +595,9 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     score = Math.max(score, isHighImpactClaim(lowerText) ? 72 : 78);
   }
 
-  if (isOrdinarySocialPost(request, lowerText, signals, claimDetails)) {
-    score = Math.max(score, isCommercialSocialPost(lowerText) ? 60 : 76);
+  const ordinarySocialPost = isOrdinarySocialPost(request, lowerText, signals, claimDetails);
+  if (ordinarySocialPost) {
+    score = Math.max(score, ordinarySocialScore(request, lowerText));
   }
 
   if (isLocalIncidentDiscussion(lowerText) && !isPublicSafetyDirective(lowerText) && !hasSevereNonSourceRisk(signals)) {
@@ -609,7 +610,7 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   const shouldTrimRoutineSocialGaps =
     isBenignSearchResultViewer(request, lowerText, signals) ||
     hasCredibleReverseMatch ||
-    isOrdinarySocialPost(request, lowerText, signals, claimDetails) ||
+    ordinarySocialPost ||
     isInstitutionalSourceContext(request, lowerText);
   const finalMissingSignals = shouldTrimRoutineSocialGaps
     ? missingSignals.filter(
@@ -1573,6 +1574,44 @@ function isOrdinarySocialPost(
     return false;
   }
   return true;
+}
+
+function ordinarySocialScore(request: CredibilityAssessRequest, text: string): number {
+  if (isCommercialSocialPost(text)) return 60;
+
+  const seedText = [
+    request.pageTitle,
+    request.authorName,
+    request.authorHandle,
+    primaryVisiblePostText(request) || request.visibleText,
+    request.screenshotOcrText,
+    request.imageCrop?.description
+  ]
+    .filter(Boolean)
+    .join("|");
+
+  let score = 76 + stableBucket(seedText || text, 11);
+
+  if (hasVerifiedAccountContext(request)) score += 5;
+  if (request.accountContext?.accountAgeText) score += 2;
+  if (request.accountContext?.followerCountText || request.accountContext?.friendCountText) score += 1;
+  if (request.imageCrop?.dataUrl || request.imageCrop?.description) score += 1;
+  if (/\b(like number is\d{5,}|reposted \d{4,}|reshare number is\d{4,}|save number is\d{4,})\b/i.test(text)) {
+    score += 2;
+  }
+  if (!request.accountContext && !hasVerifiedAccountContext(request)) score = Math.min(score, 89);
+
+  return Math.max(76, Math.min(95, score));
+}
+
+function stableBucket(value: string, modulo: number): number {
+  if (modulo <= 1) return 0;
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % modulo;
 }
 
 function isBenignSearchResultViewer(

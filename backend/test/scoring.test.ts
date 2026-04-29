@@ -609,6 +609,45 @@ describe("heuristicAssessment", () => {
     expect(result.riskSignals?.some((signal) => signal.category === "claim-verification")).not.toBe(true);
   });
 
+  it("spreads ordinary low-risk reel scores instead of pinning every safe post to 76", () => {
+    const samples = [
+      {
+        pageTitle: "laurenandrich",
+        visibleText:
+          "laurenandrich\nFollow\nFollow Lauren & Rich | Van Life & Dog Friendly Travel\nDecisions decisions… 🤔 …\nLike number is277821. View likes\nComment number is1826. View comments\nReposted 4751 times\nReshare number is264175\nSave number is14806\nReel by laurenandrich. Double tap to play or pause."
+      },
+      {
+        pageTitle: "thegrocerystoresydney",
+        visibleText:
+          "thegrocerystoresydney\nFollow\nFollow The Grocery Store\nPapaya but make it spicy. …\nLike number is24. View likes\nReshare number is7\nReel by thegrocerystoresydney. Double tap to play or pause."
+      },
+      {
+        pageTitle: "kinso.kinterns",
+        visibleText:
+          "kinso.kinterns\nFollow\nFollow Kinso Kinterns\nWhen the 20 year old interns meet the 20 year o …\nLike number is293233. View likes\nComment number is265. View comments\nReposted 2333 times\nReshare number is29282\nSave number is16744\nReel by kinso.kinterns. Double tap to play or pause."
+      }
+    ];
+
+    const scores = samples.map((sample) =>
+      heuristicAssessment({
+        client: "android",
+        contentType: "post",
+        pageTitle: sample.pageTitle,
+        visibleText: sample.visibleText,
+        screenshotOcrText:
+          `Image or video description: Profile picture of ${sample.pageTitle}\nImage or video description: Like\nImage or video description: Comment\nImage or video description: Share`,
+        visibleProfileSignals: ["App detected: Instagram", "Captured after scrolling paused for 1.5 seconds"],
+        imageCrop: {
+          mediaType: "image/jpeg",
+          description: `Image or video description: Profile picture of ${sample.pageTitle}`
+        }
+      }).score
+    );
+
+    expect(scores.every((score) => score >= 76 && score <= 95)).toBe(true);
+    expect(new Set(scores).size).toBeGreaterThan(1);
+  });
+
   it("treats local incident retellings as ordinary stories when they do not ask the user to act", () => {
     const result = heuristicAssessment({
       client: "android",
