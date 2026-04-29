@@ -1,6 +1,8 @@
 const githubRepoUrl = "https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon";
 const publicHomeUrl = "https://trustlens.z2hs.au";
-const apkDownloadUrl = `${githubRepoUrl}/releases/latest/download/trustlens-debug.apk`;
+const downloadPageUrl = `${publicHomeUrl}/download`;
+const androidActionsUrl = `${githubRepoUrl}/actions/workflows/android-apk.yml?query=branch%3Amain`;
+const latestReleaseApkUrl = `${githubRepoUrl}/releases/latest/download/trustlens-debug.apk`;
 
 export function landingPageHtml(): string {
   return `<!doctype html>
@@ -802,7 +804,7 @@ export function landingPageHtml(): string {
         </a>
         <div class="nav-links">
           <a href="${githubRepoUrl}">GitHub</a>
-          <a href="${apkDownloadUrl}">APK</a>
+          <a href="${downloadPageUrl}">APK</a>
         </div>
       </nav>
 
@@ -814,7 +816,7 @@ export function landingPageHtml(): string {
             a clear risk label before a scam, hoax, or panic-share gets a chance to travel.
           </p>
           <div class="actions">
-            <a class="button" href="${apkDownloadUrl}">Download Android APK</a>
+            <a class="button" href="${downloadPageUrl}">Download Android APK</a>
             <a class="button secondary" href="${githubRepoUrl}">View GitHub repo</a>
           </div>
           <div class="proof" aria-label="TrustLens highlights">
@@ -978,6 +980,251 @@ export function landingPageHtml(): string {
         button.addEventListener("click", () => setDemoState(button.dataset.demoState));
       });
     </script>
+  </body>
+</html>`;
+}
+
+export function downloadPageHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Download TrustLens APK</title>
+    <meta
+      name="description"
+      content="Download the latest TrustLens Android APK from the newest GitHub Actions build."
+    />
+    <style>
+      :root {
+        --ink: #20283a;
+        --ink-soft: #586174;
+        --teal: #66b7b8;
+        --lavender: #aaa2e6;
+        --paper: #fbfaf7;
+        --panel: #ffffff;
+        --line: #e8e2da;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 18% 18%, rgba(102, 183, 184, 0.22), transparent 28%),
+          radial-gradient(circle at 84% 4%, rgba(170, 162, 230, 0.2), transparent 24%),
+          var(--paper);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .wrap {
+        width: min(1040px, calc(100% - 36px));
+        margin: 0 auto;
+        padding: 30px 0 72px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 90px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 18px;
+        font-weight: 760;
+        text-decoration: none;
+      }
+
+      .mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background:
+          linear-gradient(135deg, rgba(102, 183, 184, 0.9), rgba(170, 162, 230, 0.88)),
+          #fff;
+        box-shadow: 0 14px 34px rgba(32, 40, 58, 0.13);
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 18px;
+        color: var(--ink-soft);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .nav-links a {
+        text-decoration: none;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.55fr);
+        gap: 42px;
+        align-items: center;
+      }
+
+      h1 {
+        max-width: 720px;
+        margin: 0;
+        font-size: clamp(46px, 7vw, 84px);
+        line-height: 1;
+      }
+
+      .lead {
+        max-width: 660px;
+        margin: 24px 0 0;
+        color: var(--ink-soft);
+        font-size: 21px;
+        line-height: 1.55;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 34px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 54px;
+        padding: 0 22px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        color: #fff;
+        background: var(--ink);
+        font-size: 15px;
+        font-weight: 780;
+        text-decoration: none;
+        box-shadow: 0 18px 42px rgba(32, 40, 58, 0.2);
+      }
+
+      .button.secondary {
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.76);
+        border-color: var(--line);
+        box-shadow: none;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: 0 26px 80px rgba(32, 40, 58, 0.11);
+        padding: 24px;
+      }
+
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 25px;
+      }
+
+      .steps {
+        display: grid;
+        gap: 16px;
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 13px;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .steps strong {
+        display: block;
+        color: var(--ink);
+        font-size: 15px;
+      }
+
+      .num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        color: #fff;
+        background: linear-gradient(135deg, var(--teal), var(--lavender));
+        font-weight: 800;
+      }
+
+      .note {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      @media (max-width: 820px) {
+        .nav {
+          margin-bottom: 54px;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <nav class="nav" aria-label="Download navigation">
+        <a class="brand" href="${publicHomeUrl}"><span class="mark" aria-hidden="true"></span>TrustLens</a>
+        <div class="nav-links">
+          <a href="${publicHomeUrl}">Home</a>
+          <a href="${githubRepoUrl}">GitHub</a>
+        </div>
+      </nav>
+
+      <section class="hero">
+        <div>
+          <h1>Get the newest Android build.</h1>
+          <p class="lead">TrustLens APKs are built by GitHub Actions. The latest successful Android workflow run contains the newest downloadable package as the <strong>trustlens-debug-apk</strong> artifact.</p>
+          <div class="actions">
+            <a class="button" href="${androidActionsUrl}">Open latest Actions build</a>
+            <a class="button secondary" href="${latestReleaseApkUrl}">Try latest release APK</a>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <h2>How to download</h2>
+          <ol class="steps">
+            <li><span class="num">1</span><span><strong>Open the Android workflow.</strong>Use the newest successful run on the main branch.</span></li>
+            <li><span class="num">2</span><span><strong>Find Artifacts.</strong>Download <strong>trustlens-debug-apk</strong> from the run summary.</span></li>
+            <li><span class="num">3</span><span><strong>Install the APK.</strong>Unzip the artifact if needed, then install <strong>trustlens-debug.apk</strong> on Android.</span></li>
+          </ol>
+          <p class="note">GitHub Actions artifacts are attached to individual workflow runs. This page always sends you to the Android build history so you can choose the newest successful APK.</p>
+        </aside>
+      </section>
+    </main>
   </body>
 </html>`;
 }

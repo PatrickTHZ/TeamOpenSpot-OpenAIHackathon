@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { API_VERSION, assessSchema, publicRuntimeConfig } from "./api-metadata.ts";
-import { landingPageHtml } from "./landing-page.ts";
+import { downloadPageHtml, landingPageHtml } from "./landing-page.ts";
 import {
   assessCredibility,
   heuristicAssessment,
@@ -96,6 +96,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/download") {
+      writeHtml(response, 200, downloadPageHtml());
+      return;
+    }
+
     if (request.method === "GET" && assetContentTypes[url.pathname]) {
       const asset = await readPublicAsset(url.pathname);
       if (!asset) {
@@ -111,7 +116,7 @@ const server = createServer(async (request, response) => {
         ok: true,
         service: "trustlens-backend",
         apiVersion: API_VERSION,
-        endpoints: ["/", "/v1/assess", "/v1/schema", "/v1/evidence"],
+        endpoints: ["/", "/download", "/v1/assess", "/v1/schema", "/v1/evidence"],
         config: publicRuntimeConfig(env)
       }, requestId);
       return;
