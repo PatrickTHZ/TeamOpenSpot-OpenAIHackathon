@@ -65,6 +65,33 @@ describe("validateAssessRequest", () => {
     expect(request.verificationMode).toBe("web");
   });
 
+  it("accepts the Android accessibility capture payload shape", () => {
+    const request = validateAssessRequest({
+      client: "android",
+      visibleText: "Act now to claim your prize at www.example.com/claim",
+      screenshotOcrText: "",
+      contentType: "post",
+      locale: "en-AU",
+      visibleProfileSignals: ["Sponsored", "2 h", "Example profile image"],
+      extractedLinks: [
+        {
+          text: "www.example.com/claim",
+          href: "https://www.example.com/claim",
+          source: "visible"
+        }
+      ]
+    });
+
+    expect(request.client).toBe("android");
+    expect(request.visibleText).toContain("claim your prize");
+    expect(request.visibleProfileSignals).toEqual(["Sponsored", "2 h", "Example profile image"]);
+    expect(request.extractedLinks?.[0]).toEqual({
+      text: "www.example.com/claim",
+      href: "https://www.example.com/claim",
+      source: "visible"
+    });
+  });
+
   it("caps long request fields and repeated arrays", () => {
     const request = validateAssessRequest({
       client: "chrome",
@@ -176,6 +203,31 @@ describe("heuristicAssessment", () => {
 
     expect(result.riskLevel).toBe("high");
     expect(result.evidenceAgainst.join(" ")).toContain("links look shortened");
+  });
+
+  it("scores Android accessibility capture output without requiring OCR or screenshots", () => {
+    const request = validateAssessRequest({
+      client: "android",
+      visibleText: "Act now and click the link below to claim your prize.",
+      screenshotOcrText: "",
+      contentType: "post",
+      locale: "en-AU",
+      visibleProfileSignals: ["Sponsored"],
+      extractedLinks: [
+        {
+          text: "bit.ly/claim-now",
+          href: "https://bit.ly/claim-now",
+          source: "visible"
+        }
+      ]
+    });
+
+    const result = heuristicAssessment(request);
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.label).toBe("Suspicious");
+    expect(result.requestedActions?.some((action) => action.action === "click_link")).toBe(true);
+    expect(result.advice).toContain("Do not click");
   });
 
   it("gives stronger support to official source domains", () => {
