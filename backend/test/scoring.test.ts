@@ -523,7 +523,7 @@ describe("heuristicAssessment", () => {
     expect(result.requestedActions).toBeUndefined();
   });
 
-  it("keeps local incident group posts in needs-checking rather than red by default", () => {
+  it("treats local incident retellings as ordinary stories when they do not ask the user to act", () => {
     const result = heuristicAssessment({
       client: "android",
       contentType: "post",
@@ -535,10 +535,28 @@ describe("heuristicAssessment", () => {
       imageCrop: { description: "Image or video description: Photo" }
     });
 
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.riskLevel).toBe("low");
+    expect(result.evidenceAgainst).toEqual([]);
+    expect(result.requestedActions).toBeUndefined();
+  });
+
+  it("keeps local incident safety instructions in needs-checking", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Like button. Double tap and hold to react to the comment.",
+      visibleText:
+        "Sydney Trains Complaint\nJordan Collier · 14m · Shared with: Public group\nTrain stopped between Leumeah and Campbelltown. Do not travel on this line and avoid the station.",
+      screenshotOcrText: "Image or video description: Photo",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "Image or video description: Photo" }
+    });
+
     expect(result.score).toBeGreaterThanOrEqual(50);
     expect(result.score).toBeLessThan(75);
     expect(result.riskLevel).toBe("medium");
-    expect(result.requestedActions).toBeUndefined();
+    expect(result.evidenceAgainst.join(" ")).toContain("safety guidance");
   });
 
   it("treats product support anecdotes as ordinary discussion, not misinformation", () => {

@@ -599,7 +599,9 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     score = Math.max(score, isCommercialSocialPost(lowerText) ? 60 : 76);
   }
 
-  if (isLocalIncidentDiscussion(lowerText) && !hasSevereNonSourceRisk(signals)) {
+  if (isLocalIncidentDiscussion(lowerText) && !isPublicSafetyDirective(lowerText) && !hasSevereNonSourceRisk(signals)) {
+    score = Math.max(score, 76);
+  } else if (isLocalIncidentDiscussion(lowerText) && !hasSevereNonSourceRisk(signals)) {
     score = Math.max(score, 52);
   }
 
@@ -714,7 +716,13 @@ function assessSourceCredibility(
   const officialClaim =
     /official|government|bank|medicare|mygov|ato|police|council|emergency/.test(text) ||
     (/\bhealth\b/.test(text) && !isGeneralNutritionWellnessAdvice(text));
-  if (officialClaim && !trustedDomain && !trustedSource && !isInstitutionalSourceContext(request, text)) {
+  if (
+    officialClaim &&
+    !trustedDomain &&
+    !trustedSource &&
+    !isInstitutionalSourceContext(request, text) &&
+    !(isLocalIncidentDiscussion(text) && !isPublicSafetyDirective(text))
+  ) {
     evidenceAgainst.push("The post refers to an official topic but no official source domain is visible.");
     signals.push({
       category: "source-credibility",
@@ -1050,19 +1058,26 @@ function assessClaimSupport(
   if (highImpact && !trustedSupport) {
     if (!rapidWeightLossClaim) {
       const localDiscussion = isLocalIncidentDiscussion(text);
-      evidenceAgainst.push(
-        localDiscussion
-          ? "This appears to be a local eyewitness or group discussion about an incident, so it needs checking but is not automatically suspicious."
-          : "This is a high-impact claim but no trusted confirming source is visible."
-      );
+      const localDirective = localDiscussion && isPublicSafetyDirective(text);
+      if (!localDiscussion || localDirective) {
+        evidenceAgainst.push(
+          localDirective
+            ? "This local incident post includes safety guidance, so it should be checked against an official update before relying on it."
+            : "This is a high-impact claim but no trusted confirming source is visible."
+        );
+      } else {
+        missingSignals.push("This appears to be a local incident story, not an instruction or sales claim.");
+      }
       signals.push({
         category: "claim-verification",
-        weight: localDiscussion ? 8 : 16,
+        weight: localDiscussion ? (localDirective ? 8 : 4) : 16,
         message: localDiscussion
-          ? "Local incident discussion lacks independent confirmation."
+          ? localDirective
+            ? "Local incident safety guidance lacks independent confirmation."
+            : "Local incident story does not require source verification by default."
           : "High-impact claim lacks visible trusted support."
       });
-      scoreDelta -= localDiscussion ? 4 : 16;
+      scoreDelta -= localDiscussion ? (localDirective ? 4 : 0) : 16;
     } else {
       signals.push({
         category: "claim-verification",
@@ -1315,6 +1330,7 @@ function hasStrongContradictingRisk(signals: RiskSignal[], text: string): boolea
 
 function isHighImpactClaim(text: string): boolean {
   if (isGeneralNutritionWellnessAdvice(text)) return false;
+  if (isPublicSafetyDirective(text)) return true;
   return /cure|medicine|vaccine|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(
     text
   );
@@ -1435,6 +1451,12 @@ function isLocalIncidentDiscussion(text: string): boolean {
   );
 }
 
+function isPublicSafetyDirective(text: string): boolean {
+  return /\b(avoid (?:the )?(?:area|station|road|line)|do not travel|don't travel|evacuat(?:e|ion)|shelter in place|lockdown|stay away|road closed|line closed|service suspended|emergency warning|official warning|seek alternate|call 000|call 911)\b/i.test(
+    text
+  );
+}
+
 function hasScamContextForGuaranteed(text: string): boolean {
   return /\b(guaranteed (?:returns?|profit|income|cash|weight loss|cure|result|prize|win)|crypto|investment|miracle|secret cure|one simple daily habit|no pills|no gym)\b/i.test(
     text
@@ -1454,7 +1476,7 @@ function isOrdinarySocialPost(
   claimDetails: ClaimDetail[]
 ): boolean {
   if (!isSocialAppCapture(request, text)) return false;
-  if (isLocalIncidentDiscussion(text)) return false;
+  if (isLocalIncidentDiscussion(text) && isPublicSafetyDirective(text)) return false;
   if (claimDetails.some((detail) => detail.status === "unsupported" && detail.severity === "high")) return false;
   if (signals.some((signal) => signal.weight >= 14 && signal.category !== "source-credibility")) return false;
   if (detectRapidWeightLossClaim(text)) return false;
