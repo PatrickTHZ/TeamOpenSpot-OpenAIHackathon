@@ -2144,6 +2144,10 @@ function detectRequestedActions(
   const text = allText(request).toLowerCase();
   const actions: RequestedAction[] = [];
   const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
+  const trustedInstitutionalAction =
+    analysis.score >= 75 &&
+    isInstitutionalSourceContext(request, text) &&
+    !analysis.signals.some((signal) => signal.category === "link-mismatch" || signal.weight >= 14);
   const benignSearchResult = isBenignSearchResultViewer(request, text, analysis.signals);
   const explicitClickRequest =
     Boolean(request.extractedLinks?.length) ||
@@ -2154,10 +2158,12 @@ function detectRequestedActions(
   if (!benignSearchResult && explicitClickRequest) {
     actions.push({
       action: "click_link",
-      risk: highRisk ? "high" : "medium",
+      risk: highRisk ? "high" : trustedInstitutionalAction ? "low" : "medium",
       target: request.extractedLinks?.[0]?.href || request.url,
       advice: highRisk
         ? "Do not click the link. Type the official website address yourself."
+        : trustedInstitutionalAction
+          ? "This appears to be a normal link or sign-up action from a recognized source."
         : "Check the link carefully before opening it."
     });
   }

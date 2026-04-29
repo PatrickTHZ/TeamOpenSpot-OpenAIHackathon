@@ -473,7 +473,7 @@ describe("heuristicAssessment", () => {
     expect(result.requestedActions).toBeUndefined();
   });
 
-  it("treats normal verified sponsored ads as ordinary commercial content when no scam signal is present", () => {
+  it("treats normal verified sponsored ads and their signup actions as low risk", () => {
     const result = heuristicAssessment({
       client: "android",
       contentType: "post",
@@ -487,7 +487,27 @@ describe("heuristicAssessment", () => {
 
     expect(result.score).toBeGreaterThanOrEqual(60);
     expect(result.riskLevel).not.toBe("high");
-    expect(result.requestedActions?.[0]?.risk).toBe("medium");
+    expect(result.requestedActions?.[0]?.risk).toBe("low");
+  });
+
+  it("treats normal ChatGPT signup ads as low risk when no scam signal is present", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Create images with ChatGPT",
+      visibleText:
+        "ChatGPT\nSponsored · Public\nBreak big projects down with step-by-step guidance from ChatGPT. Try ChatGPT now. Sign up.",
+      screenshotOcrText: "Image or video description: ChatGPT Profile picture\nImage",
+      visibleProfileSignals: ["App detected: Facebook"],
+      imageCrop: { description: "ChatGPT Profile picture" }
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(75);
+    expect(result.riskLevel).toBe("low");
+    expect(result.requestedActions?.[0]).toMatchObject({
+      action: "click_link",
+      risk: "low"
+    });
   });
 
   it("does not let the word who accidentally match World Health Organization", () => {
