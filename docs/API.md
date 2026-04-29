@@ -165,6 +165,8 @@ For Facebook-style posts, the backend does not scrape private Facebook data. The
 
 Trusted examples include `.gov.au`, `.edu.au`, `.gov`, `.edu`, `.nhs.uk`, `abc.net.au`, `bbc.com`, `reuters.com`, `apnews.com`, `who.int`, and `bom.gov.au`.
 
+The backend also has a small reputable-source registry for screenshot/logo cues. Current entries include Reuters, Associated Press/AP News, BBC News, ABC News, SBS News, The Guardian, The New York Times, Washington Post, Al Jazeera, WHO, and Australian Government sources. A visible reputable source logo/name can raise credibility and reduce unsupported-claim penalties, but it is not a free pass: synthetic/demo, edited, scam-like, or manipulated image signals can still make the result suspicious.
+
 Risky patterns include URL shorteners, punycode `xn--`, IP-address links, and domains containing `login`, `verify`, `account`, `prize`, `gift`, or `claim`.
 
 Claim verification means checking whether supplied evidence supports the claim. OCR text and image descriptions are treated as claim text, not just link text. Product, wellness, skin, supplement, cure, anti-aging, or before/after claims extracted from a screenshot are lowered when no trusted support is visible.

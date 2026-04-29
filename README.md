@@ -48,7 +48,7 @@ Set your OpenAI key locally in `backend/.dev.vars`:
 
 ```text
 OPENAI_API_KEY=sk-your-key
-OPENAI_MODEL=gpt-5
+OPENAI_MODEL=gpt-5.2
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
 ```

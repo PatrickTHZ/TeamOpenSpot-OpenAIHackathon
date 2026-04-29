@@ -15,7 +15,7 @@ import type {
 import type { Env } from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const ANALYSIS_VERSION = "risk-rules-2026-04-29.3";
+const ANALYSIS_VERSION = "risk-rules-2026-04-29.4";
 const MAX_TEXT_LENGTH = 6000;
 const MAX_LINKS = 16;
 const MAX_ACCOUNT_RECENT_POSTS = 5;
@@ -25,6 +25,82 @@ const DEFAULT_OPENAI_TIMEOUT_MS = 2500;
 const MAX_OPENAI_TIMEOUT_MS = 6000;
 const DEFAULT_WEB_VERIFICATION_TIMEOUT_MS = 6000;
 const MAX_WEB_VERIFICATION_TIMEOUT_MS = 12000;
+
+interface TrustedSource {
+  name: string;
+  domains: string[];
+  logoAliases: string[];
+  sourceType: "official" | "news" | "medical";
+}
+
+const TRUSTED_SOURCE_REGISTRY: TrustedSource[] = [
+  {
+    name: "ABC News",
+    domains: ["abc.net.au", "abcnews.go.com"],
+    logoAliases: ["abc news", "abc australia"],
+    sourceType: "news"
+  },
+  {
+    name: "Reuters",
+    domains: ["reuters.com"],
+    logoAliases: ["reuters"],
+    sourceType: "news"
+  },
+  {
+    name: "Associated Press",
+    domains: ["apnews.com", "ap.org"],
+    logoAliases: ["ap news", "associated press"],
+    sourceType: "news"
+  },
+  {
+    name: "BBC News",
+    domains: ["bbc.com", "bbc.co.uk"],
+    logoAliases: ["bbc news", "bbc"],
+    sourceType: "news"
+  },
+  {
+    name: "SBS News",
+    domains: ["sbs.com.au"],
+    logoAliases: ["sbs news", "sbs"],
+    sourceType: "news"
+  },
+  {
+    name: "The Guardian",
+    domains: ["theguardian.com"],
+    logoAliases: ["the guardian", "guardian news"],
+    sourceType: "news"
+  },
+  {
+    name: "The New York Times",
+    domains: ["nytimes.com"],
+    logoAliases: ["new york times", "nytimes", "the new york times"],
+    sourceType: "news"
+  },
+  {
+    name: "Washington Post",
+    domains: ["washingtonpost.com"],
+    logoAliases: ["washington post", "the washington post"],
+    sourceType: "news"
+  },
+  {
+    name: "Al Jazeera",
+    domains: ["aljazeera.com"],
+    logoAliases: ["al jazeera", "aljazeera"],
+    sourceType: "news"
+  },
+  {
+    name: "World Health Organization",
+    domains: ["who.int"],
+    logoAliases: ["world health organization", "who"],
+    sourceType: "medical"
+  },
+  {
+    name: "Australian Government",
+    domains: ["health.gov.au", "bom.gov.au", "ato.gov.au", "my.gov.au"],
+    logoAliases: ["australian government", "health.gov.au", "bureau of meteorology", "bom", "ato", "mygov"],
+    sourceType: "official"
+  }
+];
 
 interface RiskSignal {
   category:
@@ -460,7 +536,7 @@ function assessSourceCredibility(
     missingSignals.push("No account age, verification, or profile history is visible.");
   }
 
-  if (/verified|blue tick|official|government|posted by/.test(profileText)) {
+  if (hasPositiveTrustSignal(profileText)) {
     evidenceFor.push("The visible profile signals suggest an official or verified source.");
     scoreDelta += 8;
   }
@@ -471,8 +547,19 @@ function assessSourceCredibility(
     scoreDelta += 12;
   }
 
+  const trustedSource = trustedSourceFromEvidence(request, domains);
+  if (trustedSource && !trustedDomain) {
+    evidenceFor.push(`The screenshot or source text appears to show ${trustedSource.name}, a reputable source.`);
+    signals.push({
+      category: "source-credibility",
+      weight: 8,
+      message: `Trusted source cue detected: ${trustedSource.name}.`
+    });
+    scoreDelta += 8;
+  }
+
   const officialClaim = /official|government|bank|medicare|mygov|ato|police|council|health|emergency/.test(text);
-  if (officialClaim && !trustedDomain) {
+  if (officialClaim && !trustedDomain && !trustedSource) {
     evidenceAgainst.push("The post refers to an official topic but no official source domain is visible.");
     signals.push({
       category: "source-credibility",
@@ -566,7 +653,7 @@ function assessAccountCredibility(request: CredibilityAssessRequest): {
   }
 
   const verificationText = (account.verificationSignals || []).join(" ").toLowerCase();
-  if (/verified|official|blue tick|badge|meta verified/.test(verificationText)) {
+  if (hasPositiveTrustSignal(verificationText)) {
     accountFor.push("The profile has a visible verification or official signal.");
     evidenceFor.push("The profile has a visible verification or official signal.");
     accountScore += 12;
@@ -633,6 +720,22 @@ function assessAccountCredibility(request: CredibilityAssessRequest): {
       missingSignals: dedupe(accountMissing).slice(0, 6)
     }
   };
+}
+
+function hasPositiveTrustSignal(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (
+    /\b(no|not|without|missing|absent)\s+(?:visible\s+)?(?:verified|verification|official|blue tick|badge|meta verified)\b/.test(
+      trimmed
+    )
+  ) {
+    return false;
+  }
+  if (/\b(?:verified|official|blue tick|government|posted by|meta verified)\b/.test(trimmed)) {
+    return true;
+  }
+  return /\bbadge\b/.test(trimmed) && !/\b(no|not|without|missing|absent)\s+(?:visible\s+)?badge\b/.test(trimmed);
 }
 
 function assessScamLanguage(text: string): {
@@ -756,14 +859,20 @@ function assessClaimSupport(
   const hasNumbers = /\b\d{2,}[%$]?\b|\$\d+/.test(text);
   const hasDate = /\b(today|tomorrow|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/.test(text);
   const trustedDomain = domains.some(isTrustedDomain);
+  const trustedSource = trustedSourceFromEvidence(request, domains);
+  const trustedSupport = trustedDomain || Boolean(trustedSource && !hasImageManipulationCue(imageText));
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
 
-  if (highImpact && trustedDomain) {
-    evidenceFor.push("A high-impact claim has an official or established source domain visible.");
+  if (highImpact && trustedSupport) {
+    evidenceFor.push(
+      trustedDomain
+        ? "A high-impact claim has an official or established source domain visible."
+        : `A high-impact claim appears in a screenshot/source context for ${trustedSource?.name}.`
+    );
     scoreDelta += 8;
   }
 
-  if (highImpact && !trustedDomain) {
+  if (highImpact && !trustedSupport) {
     evidenceAgainst.push("This is a high-impact claim but no trusted confirming source is visible.");
     signals.push({
       category: "claim-verification",
@@ -778,7 +887,7 @@ function assessClaimSupport(
     scoreDelta -= 8;
   }
 
-  if (imageExtractedClaim && !trustedDomain) {
+  if (imageExtractedClaim && !trustedSupport) {
     evidenceAgainst.push("Text found in the image makes a product, health, or before/after claim without trusted support.");
     signals.push({
       category: "claim-verification",
@@ -831,7 +940,7 @@ function assessImageSuspicion(
 
   const imageText = imageEvidenceText(request);
   const explicitSynthetic = /\b(synthetic|demo example|misinformation-detection testing|ai[-\s]?generated|generated\s+(?:by|with)\s+ai|(?:image|photo|picture|artwork)\s+(?:was\s+)?generated\s+by\s+ai|ai[-\s]?created|ai[-\s]?enhanced|generated image|made with ai|dall-?e|midjourney|stable diffusion|deepfake)\b/.test(imageText);
-  const manipulationCue = /photoshop|edited|fake image|manipulated|retouched|airbrushed|face swap|filter/.test(imageText);
+  const manipulationCue = hasImageManipulationCue(imageText) && !explicitSynthetic;
   const imageClaim = hasImageExtractedClaim(imageText);
 
   if (explicitSynthetic || manipulationCue) {
@@ -1123,20 +1232,64 @@ function isSuspiciousLink(link: string): boolean {
 }
 
 function isTrustedDomain(domain: string): boolean {
-  return (
+  return Boolean(trustedSourceByDomain(domain)) ||
     domain.endsWith(".gov.au") ||
     domain.endsWith(".edu.au") ||
     domain.endsWith(".gov") ||
     domain.endsWith(".edu") ||
-    domain.endsWith(".nhs.uk") ||
-    domain === "abc.net.au" ||
-    domain === "bbc.com" ||
-    domain === "bbc.co.uk" ||
-    domain === "reuters.com" ||
-    domain === "apnews.com" ||
-    domain === "who.int" ||
-    domain === "bom.gov.au"
+    domain.endsWith(".nhs.uk");
+}
+
+function trustedSourceByDomain(domain: string): TrustedSource | null {
+  const normalized = domain.toLowerCase().replace(/^www\./, "");
+  return (
+    TRUSTED_SOURCE_REGISTRY.find((source) =>
+      source.domains.some((sourceDomain) =>
+        normalized === sourceDomain || normalized.endsWith(`.${sourceDomain}`)
+      )
+    ) || null
   );
+}
+
+function trustedSourceFromEvidence(
+  request: CredibilityAssessRequest,
+  domains: string[]
+): TrustedSource | null {
+  for (const domain of domains) {
+    const source = trustedSourceByDomain(domain);
+    if (source) return source;
+  }
+
+  const text = trustedSourceEvidenceText(request);
+  if (!text) return null;
+
+  return (
+    TRUSTED_SOURCE_REGISTRY.find((source) =>
+      source.logoAliases.some((alias) => text.includes(alias))
+    ) || null
+  );
+}
+
+function trustedSourceEvidenceText(request: CredibilityAssessRequest): string {
+  return [
+    request.url,
+    request.pageTitle,
+    request.authorName,
+    request.authorHandle,
+    request.screenshotOcrText,
+    request.imageCrop?.description,
+    ...(request.visibleProfileSignals || []),
+    request.accountContext?.displayName,
+    request.accountContext?.handle,
+    request.accountContext?.bioText
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function hasImageManipulationCue(text: string): boolean {
+  return /\b(synthetic|demo example|misinformation-detection testing|ai[-\s]?generated|generated\s+(?:by|with)\s+ai|(?:image|photo|picture|artwork)\s+(?:was\s+)?generated\s+by\s+ai|ai[-\s]?created|ai[-\s]?enhanced|generated image|made with ai|dall-?e|midjourney|stable diffusion|deepfake|photoshop|edited|fake image|manipulated|retouched|airbrushed|face swap|filter)\b/.test(text);
 }
 
 function isSuspiciousDomainName(domain: string): boolean {
@@ -1531,7 +1684,7 @@ async function maybeAddWebVerification(
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: env.OPENAI_MODEL || "gpt-5",
+        model: env.OPENAI_MODEL || "gpt-5.2",
         max_output_tokens: 1200,
         tools: [{ type: "web_search_preview" }],
         instructions: [

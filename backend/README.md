@@ -26,7 +26,7 @@ Local development uses `backend/.dev.vars`:
 
 ```text
 OPENAI_API_KEY=sk-your-key
-OPENAI_MODEL=gpt-5
+OPENAI_MODEL=gpt-5.2
 ```
 
 Production secret:
@@ -35,7 +35,7 @@ Production secret:
 npx wrangler secret put OPENAI_API_KEY
 ```
 
-`OPENAI_MODEL` is configured in `wrangler.jsonc` and defaults to `gpt-5`.
+`OPENAI_MODEL` is configured in `wrangler.jsonc` and defaults to `gpt-5.2`.
 
 ## Endpoint
 
@@ -127,6 +127,7 @@ The deterministic rules cover:
 - scam language: urgency, prizes, account verification, guaranteed cures, investment pressure
 - account credibility: poster/profile match, account age/history, verification hints, and recent visible post patterns
 - source credibility: visible author/profile signals, official-looking domains, suspicious domain patterns
+- reputable source registry: common trusted domains and screenshot/logo cues for outlets such as Reuters, AP, BBC, ABC News, SBS, Guardian, NYT, Washington Post, Al Jazeera, WHO, and Australian Government sources
 - link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
 - claim verification: whether high-impact claims, including OCR-extracted screenshot claims, have supplied trusted source evidence
 - AI-image suspicion: OCR/image descriptions that mention synthetic demos, AI generation, editing, deepfakes, manipulation, or before/after transformation claims
@@ -180,11 +181,14 @@ If that evidence is missing, the response should say `Needs checking`, `Suspicio
 Source credibility is a visible-evidence score, not a reputation database. It considers:
 
 - official domains such as `.gov.au`, `.edu.au`, `who.int`, `bom.gov.au`, and established news domains
+- trusted screenshot/logo cues from the small reputable-source registry
 - visible author/account names and profile signals
 - verified/official profile hints supplied by the frontend
 - risky domain patterns such as shortened links, punycode, IP-address links, or login/verify/prize-style domains
 
 The frontend should capture as much source evidence as possible: page URL, post links, author name, author handle, verification badge text, account age text, and OCR text from screenshots.
+
+A reputable logo/name in a screenshot raises credibility only when the rest of the evidence is consistent. It does not override synthetic/demo labels, edited-image cues, scam wording, or suspicious link behavior.
 
 ## Facebook Account Credibility
 
