@@ -11,6 +11,7 @@ final class TrustLensPrefs {
     private static final String KEY_LAST_CAPTURE = "last_capture";
     private static final String KEY_DEBUG_STATUS = "debug_status";
     private static final String KEY_LAST_SCREENSHOT_PATH = "last_screenshot_path";
+    private static final String KEY_ONBOARDING_DONE = "onboarding_done";
     static final String DEFAULT_BACKEND_URL = "https://trustlens.z2hs.au";
 
     static SharedPreferences prefs(Context context) {
@@ -73,5 +74,13 @@ final class TrustLensPrefs {
 
     static String lastScreenshotPath(Context context) {
         return prefs(context).getString(KEY_LAST_SCREENSHOT_PATH, "");
+    }
+
+    static boolean onboardingDone(Context context) {
+        return prefs(context).getBoolean(KEY_ONBOARDING_DONE, false);
+    }
+
+    static void setOnboardingDone(Context context, boolean done) {
+        prefs(context).edit().putBoolean(KEY_ONBOARDING_DONE, done).apply();
     }
 }

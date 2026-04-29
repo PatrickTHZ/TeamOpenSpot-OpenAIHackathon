@@ -16,7 +16,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ImageView;
 import android.widget.ScrollView;
@@ -31,7 +30,6 @@ public final class MainActivity extends Activity {
     static final String EXTRA_SHOW_DETAILS = "show_details";
 
     private LinearLayout root;
-    private EditText backendInput;
     private BackendClient backendClient;
     private OverlayBubbleController overlayController;
     private SharedPreferences.OnSharedPreferenceChangeListener preferenceListener;
@@ -75,19 +73,18 @@ public final class MainActivity extends Activity {
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(22), dp(24), dp(22), dp(28));
+        root.setPadding(dp(20), dp(28), dp(20), dp(34));
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         scrollView.addView(root);
         setContentView(scrollView);
 
         addBrandHeader();
-        addStatusPanel();
-        if (getIntent().getBooleanExtra(EXTRA_SHOW_DETAILS, false)) {
-            addAssessmentDetails();
-        } else {
-            addFlowPreview();
-            addAssessmentDetails();
+        if (!TrustLensPrefs.onboardingDone(this)) {
+            addOnboardingPanel();
+            return;
         }
+        addAssessmentDetails();
+        addStatusPanel();
     }
 
     private void renderPreservingScroll() {
@@ -99,72 +96,82 @@ public final class MainActivity extends Activity {
     }
 
     private void addBrandHeader() {
-        TextView logo = text("[ ]", 28, "#63B5B0", true);
-        logo.setGravity(Gravity.CENTER);
-        root.addView(logo);
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER);
+        header.setPadding(0, dp(18), 0, dp(24));
 
-        TextView title = text("TrustLens", 34, "#182235", true);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        logo.setAdjustViewBounds(true);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        logoParams.setMargins(0, 0, dp(12), 0);
+        header.addView(logo, logoParams);
+
+        TextView title = text("TrustLens", 36, "#182235", true);
         title.setGravity(Gravity.CENTER);
-        root.addView(title);
+        header.addView(title);
+        root.addView(header, matchWrap());
+    }
 
-        TextView tagline = text("See the truth.\nShare with confidence.", 28, "#182235", true);
-        tagline.setGravity(Gravity.CENTER);
-        tagline.setPadding(0, dp(8), 0, dp(8));
-        root.addView(tagline);
-
+    private void addOnboardingPanel() {
+        LinearLayout panel = panel();
+        panel.addView(text("Let's set up TrustLens", 28, "#182235", true));
         TextView intro = text(
-            "A floating risk bubble appears over Facebook or your browser. It waits while you scroll, then checks the visible post after you pause.",
-            16,
+            "TrustLens needs two Android permissions so the small bubble can check posts while you browse.",
+            19,
             "#4F5B6C",
             false
         );
-        intro.setGravity(Gravity.CENTER);
-        root.addView(intro, matchWrap());
+        intro.setPadding(0, dp(14), 0, dp(10));
+        panel.addView(intro);
+
+        panel.addView(section("Step 1", listOfOne("Allow the floating bubble so TrustLens can show a simple score over Facebook or Chrome.")));
+        Button overlay = button(hasOverlayPermission() ? "Floating bubble is ready" : "Allow floating bubble");
+        overlay.setEnabled(!hasOverlayPermission());
+        overlay.setOnClickListener(view -> startActivity(OverlayBubbleController.overlaySettingsIntent(this)));
+        panel.addView(overlay);
+
+        panel.addView(section("Step 2", listOfOne("Turn on TrustLens feed helper in Accessibility settings. This lets TrustLens take a screenshot after you pause.")));
+        Button accessibility = button("Open Accessibility settings");
+        accessibility.setOnClickListener(view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        panel.addView(accessibility);
+
+        panel.addView(section("Step 3", listOfOne("Open Facebook or Chrome, scroll normally, then pause for a moment. TrustLens checks once and explains the result.")));
+        Button done = button("I finished setup");
+        done.setOnClickListener(view -> {
+            TrustLensPrefs.setOnboardingDone(this, true);
+            render();
+        });
+        panel.addView(done);
+
+        root.addView(panel, matchWrap());
     }
 
     private void addStatusPanel() {
         LinearLayout panel = panel();
-        TextView heading = text("Protection", 20, "#182235", true);
+        TextView heading = text("Setup", 20, "#182235", true);
         panel.addView(heading);
 
         Switch enabled = new Switch(this);
         enabled.setText("Trust Bubble on");
-        enabled.setTextSize(18);
+        enabled.setTextSize(20);
         enabled.setTextColor(color("#182235"));
         enabled.setChecked(TrustLensPrefs.isEnabled(this));
         enabled.setPadding(0, dp(10), 0, dp(10));
         enabled.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> TrustLensPrefs.setEnabled(this, isChecked));
         panel.addView(enabled);
 
-        backendInput = new EditText(this);
-        backendInput.setSingleLine(true);
-        backendInput.setText(TrustLensPrefs.backendUrl(this));
-        backendInput.setTextSize(15);
-        backendInput.setHint(TrustLensPrefs.DEFAULT_BACKEND_URL);
-        panel.addView(label("Backend URL"));
-        panel.addView(backendInput, matchWrap());
-
-        Button saveBackend = button("Save backend");
-        saveBackend.setOnClickListener(view -> TrustLensPrefs.setBackendUrl(this, backendInput.getText().toString()));
-        panel.addView(saveBackend);
-
         Button overlay = button(hasOverlayPermission() ? "Overlay permission ready" : "Allow floating bubble");
         overlay.setEnabled(!hasOverlayPermission());
         overlay.setOnClickListener(view -> startActivity(OverlayBubbleController.overlaySettingsIntent(this)));
         panel.addView(overlay);
 
-        Button testOverlay = button("Test floating bubble");
-        testOverlay.setOnClickListener(view -> testFloatingBubble());
-        panel.addView(testOverlay);
-
         Button accessibility = button("Open accessibility settings");
         accessibility.setOnClickListener(view -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         panel.addView(accessibility);
 
-        Button mock = button("Run mock post test");
-        mock.setOnClickListener(view -> runMockPostTest());
-        panel.addView(mock);
-        panel.addView(screenshotPreviewSection());
         panel.addView(debugStatusSection());
         root.addView(panel, matchWrap());
     }
@@ -184,35 +191,33 @@ public final class MainActivity extends Activity {
     private void addAssessmentDetails() {
         Assessment assessment = TrustLensPrefs.lastAssessment(this);
         LinearLayout panel = panel();
-        panel.addView(text("Latest check", 20, "#182235", true));
+        panel.addView(text("Result", 24, "#182235", true));
 
-        TextView badge = text(assessment.label, 30, colorForRisk(assessment), true);
-        badge.setPadding(0, dp(8), 0, dp(2));
+        TextView badge = text(assessment.label, 34, colorForRisk(assessment), true);
+        badge.setPadding(0, dp(14), 0, dp(4));
         panel.addView(badge);
-        panel.addView(text(assessment.plainLanguageSummary, 16, "#4F5B6C", false));
+        panel.addView(text(scoreLine(assessment), 28, colorForRisk(assessment), true));
+        TextView summary = text(assessment.plainLanguageSummary, 19, "#4F5B6C", false);
+        summary.setPadding(0, dp(12), 0, dp(8));
+        panel.addView(summary);
 
         LinearLayout metrics = new LinearLayout(this);
         metrics.setOrientation(LinearLayout.HORIZONTAL);
-        metrics.setPadding(0, dp(14), 0, dp(10));
+        metrics.setPadding(0, dp(18), 0, dp(12));
         metrics.addView(metric("Risk", capitalize(assessment.riskLevel)), weightWrap());
         metrics.addView(metric("Score", assessment.score > 0 ? String.valueOf(assessment.score) : "-"), weightWrap());
         metrics.addView(metric("Confidence", capitalize(assessment.confidence)), weightWrap());
         panel.addView(metrics);
 
-        panel.addView(section("Why", assessment.why));
-        panel.addView(section("Advice", listOfOne(assessment.advice)));
-        panel.addView(section("Risk signals", assessment.riskSignals));
-        panel.addView(section("Requested actions", assessment.requestedActions));
-        panel.addView(section("Evidence to check", mergeEvidence(assessment)));
-        panel.addView(section("Visible links", linkText(assessment.visibleLinks)));
+        panel.addView(section("Why this score", assessment.why));
+        panel.addView(section("What to do", listOfOne(assessment.advice)));
         panel.addView(screenshotPreviewSection());
-        panel.addView(rawCaptureSection());
 
         if (assessment.assessedAtMillis > 0) {
             panel.addView(text(
                 "Updated " + DateFormat.getDateFormat(this).format(new Date(assessment.assessedAtMillis))
                     + " " + DateFormat.getTimeFormat(this).format(new Date(assessment.assessedAtMillis)),
-                13,
+                15,
                 "#697589",
                 false
             ));
@@ -274,8 +279,8 @@ public final class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(8), 0, dp(8), 0);
-        TextView labelView = text(label, 12, "#697589", true);
-        TextView valueView = text(value, 17, "#182235", true);
+        TextView labelView = text(label, 15, "#697589", true);
+        TextView valueView = text(value, 20, "#182235", true);
         box.addView(labelView);
         box.addView(valueView);
         return box;
@@ -284,12 +289,12 @@ public final class MainActivity extends Activity {
     private LinearLayout section(String title, List<String> values) {
         LinearLayout section = new LinearLayout(this);
         section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(0, dp(12), 0, 0);
-        section.addView(text(title, 16, "#182235", true));
+        section.setPadding(0, dp(20), 0, 0);
+        section.addView(text(title, 21, "#182235", true));
         if (values.isEmpty()) values = listOfOne("No details captured yet.");
         for (String value : values) {
-            TextView item = text("- " + value, 15, "#4F5B6C", false);
-            item.setPadding(0, dp(4), 0, 0);
+            TextView item = text("- " + value, 18, "#4F5B6C", false);
+            item.setPadding(0, dp(8), 0, 0);
             section.addView(item);
         }
         return section;
@@ -298,9 +303,9 @@ public final class MainActivity extends Activity {
     private LinearLayout rawCaptureSection() {
         LinearLayout section = new LinearLayout(this);
         section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(0, dp(12), 0, 0);
-        section.addView(text("Last captured payload", 16, "#182235", true));
-        TextView raw = text(TrustLensPrefs.lastCapture(this), 12, "#4F5B6C", false);
+        section.setPadding(0, dp(16), 0, 0);
+        section.addView(text("Last captured payload", 18, "#182235", true));
+        TextView raw = text(TrustLensPrefs.lastCapture(this), 14, "#4F5B6C", false);
         raw.setPadding(dp(10), dp(8), dp(10), dp(8));
         raw.setBackgroundColor(color("#F4F6F8"));
         section.addView(raw, matchWrap());
@@ -310,28 +315,39 @@ public final class MainActivity extends Activity {
     private LinearLayout screenshotPreviewSection() {
         LinearLayout section = new LinearLayout(this);
         section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(0, dp(12), 0, 0);
-        section.addView(text("Last screenshot sent", 16, "#182235", true));
+        section.setPadding(0, dp(22), 0, 0);
+        section.addView(text("Picture checked", 21, "#182235", true));
 
         String path = TrustLensPrefs.lastScreenshotPath(this);
-        File file = path.isEmpty() ? null : new File(path);
-        if (file != null && file.exists()) {
+        boolean isContentUri = path.startsWith("content://");
+        File file = path.isEmpty() || isContentUri ? null : new File(path);
+        if (isContentUri || (file != null && file.exists())) {
             ImageView image = new ImageView(this);
-            image.setImageBitmap(BitmapFactory.decodeFile(file.getAbsolutePath()));
+            if (isContentUri) {
+                image.setImageURI(Uri.parse(path));
+            } else {
+                image.setImageBitmap(BitmapFactory.decodeFile(file.getAbsolutePath()));
+            }
             image.setScaleType(ImageView.ScaleType.FIT_CENTER);
             image.setBackgroundColor(color("#F4F6F8"));
             image.setPadding(dp(6), dp(6), dp(6), dp(6));
             section.addView(image, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(420)
+                dp(360)
             ));
-            section.addView(text("Saved at: " + path, 12, "#697589", false));
+            section.addView(text("Saved at: " + path, 13, "#697589", false));
+            section.addView(text(
+                isContentUri ? "Open your Photos/Gallery app and look in Pictures/TrustLens." : "Open this file with Android Studio Device Explorer.",
+                14,
+                "#697589",
+                false
+            ));
         } else {
             section.addView(text(
                 path.isEmpty()
                     ? "No screenshot preview saved yet. Pause on Facebook/Chrome until diagnostics says screenshot=true."
                     : "Screenshot path was saved, but the file was not found: " + path,
-                13,
+                16,
                 "#697589",
                 false
             ));
@@ -342,23 +358,31 @@ public final class MainActivity extends Activity {
     private LinearLayout debugStatusSection() {
         LinearLayout section = new LinearLayout(this);
         section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(0, dp(14), 0, 0);
-        section.addView(text("Capture diagnostics", 16, "#182235", true));
-        TextView status = text(TrustLensPrefs.debugStatus(this), 13, "#4F5B6C", false);
+        section.setPadding(0, dp(18), 0, 0);
+        section.addView(text("Status", 19, "#182235", true));
+        TextView status = text(friendlyStatus(), 16, "#4F5B6C", false);
         status.setPadding(dp(10), dp(8), dp(10), dp(8));
         status.setBackgroundColor(color("#F4F6F8"));
         section.addView(status, matchWrap());
-
-        Button refresh = button("Refresh diagnostics");
-        refresh.setOnClickListener(view -> render());
-        section.addView(refresh);
         return section;
+    }
+
+    private String friendlyStatus() {
+        String status = TrustLensPrefs.debugStatus(this);
+        if (status.contains("Backend returned")) return "TrustLens checked the latest screen.";
+        if (status.contains("Screenshot captured") || status.contains("Sending backend request")) {
+            return "TrustLens is checking the latest screen.";
+        }
+        if (status.contains("Accessibility service connected")) return "TrustLens is ready.";
+        if (status.contains("overlay permission is not enabled")) return "Please allow the floating bubble.";
+        if (status.contains("Screenshot capture failed")) return "TrustLens could not take a picture on this screen.";
+        return "Open Facebook or Chrome, scroll, then pause for a moment.";
     }
 
     private LinearLayout panel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
+        panel.setPadding(dp(22), dp(22), dp(22), dp(22));
         panel.setBackgroundResource(R.drawable.trust_panel_bg);
         LinearLayout.LayoutParams params = matchWrap();
         params.setMargins(0, dp(18), 0, 0);
@@ -367,15 +391,15 @@ public final class MainActivity extends Activity {
     }
 
     private TextView label(String value) {
-        TextView view = text(value, 13, "#697589", true);
-        view.setPadding(0, dp(10), 0, dp(4));
+        TextView view = text(value, 16, "#697589", true);
+        view.setPadding(0, dp(14), 0, dp(6));
         return view;
     }
 
     private Button button(String value) {
         Button button = new Button(this);
         button.setText(value);
-        button.setTextSize(15);
+        button.setTextSize(18);
         button.setAllCaps(false);
         return button;
     }
@@ -430,6 +454,14 @@ public final class MainActivity extends Activity {
         if ("medium".equals(assessment.riskLevel)) return "#B88400";
         if ("high".equals(assessment.riskLevel)) return "#D14B48";
         return "#928BDD";
+    }
+
+    private String scoreLine(Assessment assessment) {
+        if (assessment.score <= 0) return "Waiting for a result";
+        if ("low".equals(assessment.riskLevel)) return assessment.score + "% Reliable";
+        if ("medium".equals(assessment.riskLevel)) return assessment.score + "% Needs context";
+        if ("high".equals(assessment.riskLevel)) return assessment.score + "% Misleading";
+        return assessment.score + "%";
     }
 
     private String capitalize(String value) {

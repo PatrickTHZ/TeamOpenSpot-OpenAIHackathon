@@ -1,20 +1,27 @@
 package au.z2hs.trustlens;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.ContentValues;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Build;
+import android.os.Environment;
 import android.text.format.DateFormat;
 import android.util.Base64;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.provider.MediaStore;
+import android.net.Uri;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 
 public final class TrustLensAccessibilityService extends AccessibilityService {
     private static final long SCROLL_PAUSE_MS = 1500L;
@@ -25,6 +32,7 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
     private OverlayBubbleController overlay;
     private String lastSignature = "";
     private String pendingSignature = "";
+    private boolean waitingForNewScrollAfterCheck = false;
 
     private final Runnable assessVisibleContent = this::runAssessment;
 
@@ -47,6 +55,20 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
             if (overlay != null) overlay.remove();
             return;
         }
+
+        CharSequence eventPackage = event.getPackageName();
+        if (shouldIgnorePackage(eventPackage)) {
+            handler.removeCallbacks(assessVisibleContent);
+            return;
+        }
+
+        if (waitingForNewScrollAfterCheck && event.getEventType() != AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            return;
+        }
+        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            waitingForNewScrollAfterCheck = false;
+        }
+
         TrustLensPrefs.storeDebugStatus(
             this,
             timestamp()
@@ -84,6 +106,14 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
     private void runAssessment() {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null || shouldIgnorePackage(root.getPackageName())) {
+                handler.removeCallbacks(assessVisibleContent);
+                TrustLensPrefs.storeDebugStatus(
+                    this,
+                    timestamp() + " Ignored active app: " + (root == null ? "no active window" : root.getPackageName())
+                );
+                return;
+            }
             CapturePayload payload = extractor.extract(root, getLastPackageName(root));
             captureScreenshotThenAssess(payload, root);
         } catch (RuntimeException error) {
@@ -101,7 +131,13 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
             return;
         }
 
+        if (overlay != null) overlay.show(Assessment.loading());
         TrustLensPrefs.storeDebugStatus(this, timestamp() + " Pause detected. Capturing screenshot before backend check.");
+        if (overlay != null) overlay.hideTemporarily();
+        handler.postDelayed(() -> requestScreenshot(payload, root), 160);
+    }
+
+    private void requestScreenshot(CapturePayload payload, AccessibilityNodeInfo root) {
         try {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
                 @Override
@@ -163,6 +199,7 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
                     + payload.mediaSignals.size()
             );
             if (overlay != null) overlay.show(Assessment.waiting("No readable post text found yet."));
+            waitingForNewScrollAfterCheck = true;
             return;
         }
         String signature = payload.signature();
@@ -175,6 +212,7 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
                     + ", links="
                     + payload.visibleLinks.size()
             );
+            waitingForNewScrollAfterCheck = true;
             return;
         }
         pendingSignature = signature;
@@ -195,6 +233,7 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
         backendClient.assess(payload, assessment -> handler.post(() -> {
             lastSignature = signature;
             pendingSignature = "";
+            waitingForNewScrollAfterCheck = true;
             TrustLensPrefs.storeDebugStatus(
                 this,
                 timestamp()
@@ -234,8 +273,45 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
                 output.write(bytes);
             }
             TrustLensPrefs.storeLastScreenshotPath(this, file.getAbsolutePath());
+            saveAuditScreenshot(bytes);
         } catch (Exception error) {
             TrustLensPrefs.storeDebugStatus(this, timestamp() + " Screenshot preview save failed: " + error.getMessage());
+        }
+    }
+
+    private void saveAuditScreenshot(byte[] bytes) {
+        try {
+            String fileName = "trustlens-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".jpg";
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/TrustLens");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+
+                Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (uri == null) return;
+                try (OutputStream output = getContentResolver().openOutputStream(uri)) {
+                    if (output != null) output.write(bytes);
+                }
+                values.clear();
+                values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(uri, values, null, null);
+                TrustLensPrefs.storeLastScreenshotPath(this, uri.toString());
+                TrustLensPrefs.storeDebugStatus(this, timestamp() + " Screenshot saved to Pictures/TrustLens: " + fileName);
+                return;
+            }
+
+            File directory = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "TrustLens");
+            if (!directory.exists() && !directory.mkdirs()) return;
+            File file = new File(directory, fileName);
+            try (FileOutputStream output = new FileOutputStream(file)) {
+                output.write(bytes);
+            }
+            TrustLensPrefs.storeLastScreenshotPath(this, file.getAbsolutePath());
+            TrustLensPrefs.storeDebugStatus(this, timestamp() + " Screenshot saved: " + file.getAbsolutePath());
+        } catch (Exception error) {
+            TrustLensPrefs.storeDebugStatus(this, timestamp() + " Screenshot audit save failed: " + error.getMessage());
         }
     }
 
@@ -252,5 +328,18 @@ public final class TrustLensAccessibilityService extends AccessibilityService {
         if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return "WINDOW_CONTENT_CHANGED";
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return "WINDOW_STATE_CHANGED";
         return String.valueOf(type);
+    }
+
+    private boolean shouldIgnorePackage(CharSequence packageName) {
+        if (packageName == null) return true;
+        String value = packageName.toString();
+        if (value.equals(getPackageName())) return true;
+        if (value.equals("android")) return true;
+        if (value.equals("com.android.systemui")) return true;
+        if (value.equals("com.android.settings")) return true;
+        if (value.contains("launcher")) return true;
+        if (value.contains("permissioncontroller")) return true;
+        if (value.contains("packageinstaller")) return true;
+        return false;
     }
 }

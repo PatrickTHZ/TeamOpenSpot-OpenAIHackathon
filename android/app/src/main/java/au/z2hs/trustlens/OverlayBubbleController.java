@@ -10,6 +10,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -17,6 +18,9 @@ final class OverlayBubbleController {
     private final Context context;
     private final WindowManager windowManager;
     private static LinearLayout bubble;
+    private static LinearLayout messageBubble;
+    private static LinearLayout logoOrb;
+    private static View scoreDot;
     private static TextView label;
     private static TextView summary;
     private static WindowManager.LayoutParams params;
@@ -49,33 +53,83 @@ final class OverlayBubbleController {
 
     void update(Assessment assessment) {
         if (bubble == null) return;
-        label.setText(assessment.label);
-        summary.setText(shortSummary(assessment));
-        bubble.setBackgroundResource(backgroundForRisk(assessment.riskLevel, assessment.band));
+        boolean idle = "Waiting".equals(assessment.label) && "unknown".equals(assessment.riskLevel);
+        boolean checking = "Checking".equals(assessment.label);
+        messageBubble.setVisibility(idle ? View.GONE : View.VISIBLE);
+        messageBubble.setBackgroundResource(backgroundForRisk(assessment.riskLevel, assessment.band));
+        scoreDot.setBackgroundResource(dotForRisk(assessment.riskLevel, assessment.band));
+
+        if (checking) {
+            label.setText("Checking...");
+            summary.setText("Scanning visible post");
+        } else if (idle) {
+            label.setText("");
+            summary.setText("");
+        } else {
+            label.setText(scoreText(assessment));
+            summary.setText(shortSummary(assessment));
+        }
     }
 
     void remove() {
         if (bubble != null && bubble.getParent() != null) windowManager.removeView(bubble);
     }
 
+    void hideTemporarily() {
+        remove();
+    }
+
     private void createBubble() {
         bubble = new LinearLayout(context);
-        bubble.setOrientation(LinearLayout.VERTICAL);
-        bubble.setPadding(dp(18), dp(12), dp(18), dp(12));
-        bubble.setMinimumWidth(dp(168));
+        bubble.setOrientation(LinearLayout.HORIZONTAL);
+        bubble.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        bubble.setPadding(0, 0, 0, 0);
         bubble.setClickable(true);
         bubble.setElevation(dp(10));
 
+        messageBubble = new LinearLayout(context);
+        messageBubble.setOrientation(LinearLayout.VERTICAL);
+        messageBubble.setPadding(dp(16), dp(10), dp(16), dp(10));
+        messageBubble.setMinimumWidth(dp(190));
+        messageBubble.setElevation(dp(8));
+
+        LinearLayout labelRow = new LinearLayout(context);
+        labelRow.setOrientation(LinearLayout.HORIZONTAL);
+        labelRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        scoreDot = new View(context);
+        labelRow.addView(scoreDot, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
         label = new TextView(context);
         label.setTextColor(0xFF182235);
-        label.setTextSize(20);
+        label.setTextSize(24);
         label.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        bubble.addView(label);
+        label.setPadding(dp(10), 0, 0, 0);
+        labelRow.addView(label);
+        messageBubble.addView(labelRow);
 
         summary = new TextView(context);
         summary.setTextColor(0xFF5F6B7E);
-        summary.setTextSize(13);
-        bubble.addView(summary);
+        summary.setTextSize(14);
+        summary.setPadding(0, dp(5), 0, 0);
+        messageBubble.addView(summary);
+        bubble.addView(messageBubble);
+
+        logoOrb = new LinearLayout(context);
+        logoOrb.setGravity(Gravity.CENTER);
+        logoOrb.setBackgroundResource(R.drawable.logo_bubble_bg);
+        logoOrb.setElevation(dp(12));
+        logoOrb.setPadding(dp(8), dp(8), dp(8), dp(8));
+
+        ImageView logoImage = new ImageView(context);
+        logoImage.setImageResource(R.drawable.ic_launcher);
+        logoImage.setAdjustViewBounds(true);
+        logoImage.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        logoOrb.addView(logoImage, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        LinearLayout.LayoutParams orbParams = new LinearLayout.LayoutParams(dp(62), dp(62));
+        orbParams.setMargins(dp(10), 0, 0, 0);
+        bubble.addView(logoOrb, orbParams);
 
         params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -132,10 +186,18 @@ final class OverlayBubbleController {
     }
 
     private String shortSummary(Assessment assessment) {
-        if ("low".equals(assessment.riskLevel)) return "Looks safer";
-        if ("medium".equals(assessment.riskLevel)) return "Check before sharing";
-        if ("high".equals(assessment.riskLevel)) return "Do not click yet";
+        if ("low".equals(assessment.riskLevel)) return "Reliable";
+        if ("medium".equals(assessment.riskLevel)) return "Needs context";
+        if ("high".equals(assessment.riskLevel)) return "Misleading";
         return assessment.plainLanguageSummary;
+    }
+
+    private String scoreText(Assessment assessment) {
+        int display = Math.max(0, Math.min(100, assessment.score));
+        if ("high".equals(assessment.riskLevel)) {
+            return display + "% Risk";
+        }
+        return display + "%";
     }
 
     private int backgroundForRisk(String riskLevel, String band) {
@@ -143,6 +205,13 @@ final class OverlayBubbleController {
         if ("high".equals(riskLevel) || "red".equals(band)) return R.drawable.bubble_high;
         if ("medium".equals(riskLevel) || "yellow".equals(band)) return R.drawable.bubble_medium;
         return R.drawable.bubble_waiting;
+    }
+
+    private int dotForRisk(String riskLevel, String band) {
+        if ("low".equals(riskLevel) || "green".equals(band)) return R.drawable.score_dot_low;
+        if ("high".equals(riskLevel) || "red".equals(band)) return R.drawable.score_dot_high;
+        if ("medium".equals(riskLevel) || "yellow".equals(band)) return R.drawable.score_dot_medium;
+        return R.drawable.score_dot_waiting;
     }
 
     private int dp(int value) {
