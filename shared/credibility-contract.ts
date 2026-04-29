@@ -58,6 +58,7 @@ export interface CredibilityAssessResponse {
   evidenceFor: string[];
   evidenceAgainst: string[];
   missingSignals: string[];
+  claimDetails?: ClaimDetail[];
   recommendedAction: string;
   riskSignals?: PublicRiskSignal[];
   requestedActions?: RequestedAction[];
@@ -78,6 +79,16 @@ export interface PublicRiskSignal {
     | "ai-image-suspicion";
   severity: "low" | "medium" | "high";
   message: string;
+}
+
+export interface ClaimDetail {
+  category: "weight-loss" | "health" | "product" | "source" | "other";
+  status: "unsupported" | "needs_checking" | "supported";
+  severity: "low" | "medium" | "high";
+  claim: string;
+  explanation: string;
+  missingEvidence: string[];
+  guidanceComparison?: string;
 }
 
 export interface AccountContext {
@@ -189,6 +200,24 @@ export const credibilityResponseJsonSchema = {
     missingSignals: {
       type: "array",
       items: { type: "string" },
+      maxItems: 6
+    },
+    claimDetails: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["category", "status", "severity", "claim", "explanation", "missingEvidence"],
+        properties: {
+          category: { type: "string", enum: ["weight-loss", "health", "product", "source", "other"] },
+          status: { type: "string", enum: ["unsupported", "needs_checking", "supported"] },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          claim: { type: "string" },
+          explanation: { type: "string" },
+          missingEvidence: { type: "array", items: { type: "string" }, maxItems: 6 },
+          guidanceComparison: { type: "string" }
+        }
+      },
       maxItems: 6
     },
     recommendedAction: { type: "string", minLength: 1 },

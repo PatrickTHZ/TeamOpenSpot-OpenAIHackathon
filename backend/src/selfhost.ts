@@ -272,6 +272,7 @@ function logAssessmentResult(input: {
       riskLevel: assessment.riskLevel,
       label: assessment.label,
       confidence: assessment.confidence,
+      plainLanguageSummary: assessment.plainLanguageSummary,
       recommendedAction: assessment.recommendedAction
     },
     processing: {
@@ -289,6 +290,8 @@ function logAssessmentResult(input: {
       JSON.stringify({
         ...base,
         why: assessment.why,
+        advice: assessment.advice,
+        claimDetails: assessment.claimDetails,
         evidenceAgainst: assessment.evidenceAgainst,
         missingSignals: assessment.missingSignals,
         riskSignals: assessment.riskSignals,
@@ -303,6 +306,15 @@ function logAssessmentResult(input: {
     JSON.stringify({
       ...base,
       why: assessment.why,
+      advice: assessment.advice,
+      claimDetails: assessment.claimDetails?.map((detail) => ({
+        category: detail.category,
+        status: detail.status,
+        severity: detail.severity,
+        claim: detail.claim,
+        explanation: detail.explanation,
+        guidanceComparison: detail.guidanceComparison
+      })),
       riskSignals: assessment.riskSignals?.map((signal) => ({
         category: signal.category,
         severity: signal.severity,

@@ -237,8 +237,8 @@ docker logs -f trustlens-backend
 
 Set `ASSESSMENT_LOG_DETAIL` to control verbosity:
 
-- `debug` logs the detailed safe result trace and is the TrueNAS default.
-- `summary` logs request ID, safe source host, evidence types, score, band, label, risk signals, latency, OCR, and storage status.
+- `debug` logs the detailed safe result trace and is the TrueNAS default, including `why`, `advice`, `claimDetails`, evidence gaps, risk signals, requested actions, and account credibility.
+- `summary` logs request ID, safe source host, evidence types, score, band, label, summary, action, `why`, `claimDetails`, risk signals, latency, OCR, and storage status.
 - `off` disables assessment result logs.
 
 Raw post text and image data are not written to runtime logs.

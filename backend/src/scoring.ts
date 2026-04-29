@@ -8,6 +8,7 @@ import type {
   CredibilityAssessRequest,
   CredibilityAssessResponse,
   AccountCredibility,
+  ClaimDetail,
   PublicRiskSignal,
   RequestedAction,
   WebVerification
@@ -120,6 +121,7 @@ interface FastRiskAnalysis {
   evidenceFor: string[];
   evidenceAgainst: string[];
   missingSignals: string[];
+  claimDetails: ClaimDetail[];
   signals: RiskSignal[];
   accountCredibility?: AccountCredibility;
 }
@@ -212,7 +214,8 @@ export function normalizeAssessment(raw: CredibilityAssessResponse): Credibility
   const evidenceFor = sanitizeList(raw.evidenceFor);
   const why = sanitizeList(raw.why).length
     ? sanitizeList(raw.why).slice(0, 4)
-    : buildWhy(score, evidenceAgainst, missingSignals, evidenceFor);
+    : buildWhy(score, evidenceAgainst, missingSignals, evidenceFor, sanitizeClaimDetails(raw.claimDetails));
+  const claimDetails = sanitizeClaimDetails(raw.claimDetails);
   const advice =
     raw.advice?.trim() ||
     raw.recommendedAction?.trim() ||
@@ -232,6 +235,7 @@ export function normalizeAssessment(raw: CredibilityAssessResponse): Credibility
     evidenceFor,
     evidenceAgainst,
     missingSignals,
+    claimDetails,
     recommendedAction:
       raw.recommendedAction?.trim() ||
       "Check the source and look for another reliable report before sharing.",
@@ -257,11 +261,12 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
     label: labelForScore(score, analysis.confidence),
     confidence: analysis.confidence,
     plainLanguageSummary: buildSummary(score, analysis),
-    why: buildWhy(score, analysis.evidenceAgainst, analysis.missingSignals, analysis.evidenceFor),
+    why: buildWhy(score, analysis.evidenceAgainst, analysis.missingSignals, analysis.evidenceFor, analysis.claimDetails),
     advice: buildAdvice(score, analysis),
     evidenceFor: analysis.evidenceFor,
     evidenceAgainst: analysis.evidenceAgainst,
     missingSignals: analysis.missingSignals,
+    claimDetails: analysis.claimDetails,
     recommendedAction: buildRecommendedAction(score, analysis),
     riskSignals: publicRiskSignals(analysis.signals),
     requestedActions: detectRequestedActions(request, analysis),
@@ -487,6 +492,7 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   const evidenceFor: string[] = [];
   const evidenceAgainst: string[] = [];
   const missingSignals: string[] = [];
+  const claimDetails: ClaimDetail[] = [];
 
   let score = 62;
 
@@ -499,7 +505,7 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   }
 
   if (links.length) {
-    evidenceFor.push(`${links.length} link${links.length === 1 ? "" : "s"} were captured for checking.`);
+    evidenceFor.push(`${links.length} link${links.length === 1 ? " was" : "s were"} captured for checking.`);
   }
 
   const source = assessSourceCredibility(request, domains, lowerText);
@@ -532,6 +538,7 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
   evidenceFor.push(...claims.evidenceFor);
   evidenceAgainst.push(...claims.evidenceAgainst);
   missingSignals.push(...claims.missingSignals);
+  claimDetails.push(...claims.claimDetails);
   signals.push(...claims.signals);
 
   const image = assessImageSuspicion(request, lowerText);
@@ -557,6 +564,7 @@ function analyzeFastRisk(request: CredibilityAssessRequest): FastRiskAnalysis {
     evidenceFor: dedupe(evidenceFor).slice(0, 6),
     evidenceAgainst: dedupe(evidenceAgainst).slice(0, 6),
     missingSignals: dedupe(missingSignals).slice(0, 6),
+    claimDetails: dedupeClaimDetails(claimDetails).slice(0, 6),
     signals,
     accountCredibility: account.accountCredibility
   };
@@ -919,11 +927,13 @@ function assessClaimSupport(
   evidenceFor: string[];
   evidenceAgainst: string[];
   missingSignals: string[];
+  claimDetails: ClaimDetail[];
   signals: RiskSignal[];
 } {
   const evidenceFor: string[] = [];
   const evidenceAgainst: string[] = [];
   const missingSignals: string[] = [];
+  const claimDetails: ClaimDetail[] = [];
   const signals: RiskSignal[] = [];
   let scoreDelta = 0;
 
@@ -949,6 +959,7 @@ function assessClaimSupport(
   if (rapidWeightLossClaim && !trustedSupport) {
     evidenceAgainst.push(rapidWeightLossClaim.evidenceMessage);
     missingSignals.push(rapidWeightLossClaim.missingMessage);
+    claimDetails.push(rapidWeightLossClaim.detail);
     signals.push({
       category: "claim-verification",
       weight: 18,
@@ -960,15 +971,19 @@ function assessClaimSupport(
   if (highImpact && !trustedSupport) {
     if (!rapidWeightLossClaim) {
       evidenceAgainst.push("This is a high-impact claim but no trusted confirming source is visible.");
+      signals.push({
+        category: "claim-verification",
+        weight: 16,
+        message: "High-impact claim lacks visible trusted support."
+      });
+      scoreDelta -= 16;
+    } else {
+      signals.push({
+        category: "claim-verification",
+        weight: 4,
+        message: "Weight-loss claim lacks visible trusted support."
+      });
     }
-    signals.push({
-      category: "claim-verification",
-      weight: rapidWeightLossClaim ? 8 : 16,
-      message: rapidWeightLossClaim
-        ? "Weight-loss claim lacks visible trusted support."
-        : "High-impact claim lacks visible trusted support."
-    });
-    scoreDelta -= rapidWeightLossClaim ? 8 : 16;
   }
 
   if ((hasNumbers || hasDate) && !request.url && !request.extractedLinks?.length) {
@@ -976,7 +991,7 @@ function assessClaimSupport(
     scoreDelta -= 8;
   }
 
-  if (imageExtractedClaim && !trustedSupport) {
+  if (imageExtractedClaim && !trustedSupport && !rapidWeightLossClaim) {
     evidenceAgainst.push("Text found in the image makes a product, health, or before/after claim without trusted support.");
     signals.push({
       category: "claim-verification",
@@ -1013,7 +1028,7 @@ function assessClaimSupport(
     scoreDelta -= 8;
   }
 
-  return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
+  return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, claimDetails, signals };
 }
 
 function assessImageSuspicion(
@@ -1091,26 +1106,61 @@ function detectRapidWeightLossClaim(text: string): {
   evidenceMessage: string;
   missingMessage: string;
   signalMessage: string;
+  detail: ClaimDetail;
 } | null {
   const hasWeightLoss = /\b(weight loss|lose|losing|lost|scale|kg|kilograms?|pounds?|lbs?)\b/.test(text);
-  const hasSpecificAmount = /\b\d+(?:\.\d+)?\s*(?:kg|kilograms?|pounds?|lbs?)\b/.test(text);
-  const hasShortWindow = /\b(?:\d+\s*(?:days?|weeks?)|30\s*days?|few weeks?)\b/.test(text);
+  const amountMatch = text.match(/\b\d+(?:\.\d+)?\s*(?:kg|kilograms?|pounds?|lbs?)\b/);
+  const windowMatch = text.match(/\b(?:\d+\s*(?:days?|weeks?)|30\s*days?|few weeks?)\b/);
+  const hasSpecificAmount = Boolean(amountMatch);
+  const hasShortWindow = Boolean(windowMatch);
   const hasSingleFoodRoutine =
     /\b(?:spinach|banana|avocado|yogurt|water|daily habit|one simple daily habit|simple green routine|no gym|no pills|no supplements?)\b/.test(
       text
     );
+  const foodMatch = text.match(/\b(spinach|banana|avocado|yogurt|water)\b/);
+  const foodQuantityMatch = text.match(/\b\d+(?:\.\d+)?\s*g(?:rams?)?\s+(?:of\s+)?(?:spinach|banana|avocado|yogurt)\b/);
   const targetsSeniors = /\b(seniors?|elderly|older adults?|over\s*\d{2})\b/.test(text);
 
   if (!hasWeightLoss || !hasSpecificAmount || !hasShortWindow) return null;
 
   const audience = targetsSeniors ? " for seniors" : "";
   const routine = hasSingleFoodRoutine ? " from a single-food/simple daily routine" : "";
+  const routineText = foodQuantityMatch?.[0] || foodMatch?.[0];
+  const specificClaim =
+    routineText && amountMatch && windowMatch
+      ? `Eating ${routineText} is presented as producing ${amountMatch[0]} weight loss in ${windowMatch[0]}.`
+      : "Specific rapid weight loss is promised from a simple daily routine.";
+  const explanationSubject = targetsSeniors
+    ? "The claim targets seniors and ties"
+    : "The claim ties";
+  const routineDescription = hasSingleFoodRoutine
+    ? "a single-food/simple daily routine"
+    : "a simple routine";
+  const outcomeDescription =
+    amountMatch && windowMatch
+      ? `${amountMatch[0]} of weight loss within ${windowMatch[0]}`
+      : "rapid, measurable weight loss to a short time frame";
   return {
     evidenceMessage: `The post claims specific rapid weight loss${audience}${routine}, but no trusted clinical or nutrition source is visible.`,
     missingMessage:
       "No citation, clinician/dietitian credential, safety caution, or calorie/lifestyle evidence is visible for the weight-loss claim.",
     signalMessage:
-      "Specific rapid weight-loss claim lacks visible support and is stronger than general healthy weight-loss guidance."
+      "Specific rapid weight-loss claim lacks visible support and is stronger than general healthy weight-loss guidance.",
+    detail: {
+      category: "weight-loss",
+      status: "unsupported",
+      severity: "high",
+      claim: specificClaim,
+      explanation: `${explanationSubject} ${routineDescription} to ${outcomeDescription}. No trusted clinical or nutrition support is visible in the supplied evidence.`,
+      missingEvidence: [
+        "A citation from a trusted clinical, nutrition, or public-health source",
+        "Clinician or dietitian credentials",
+        "A safety caution for seniors",
+        "Evidence for calorie balance, broader diet, activity, or lifestyle context"
+      ],
+      guidanceComparison:
+        "General public-health guidance is closer to gradual weight loss around 1-2 lb per week, not a guaranteed single-food routine result."
+    }
   };
 }
 
@@ -1128,11 +1178,17 @@ function isGeneralNutritionWellnessAdvice(text: string): boolean {
 }
 
 function buildSummary(score: number, analysis: FastRiskAnalysis): string {
+  const primaryUnsupportedClaim = analysis.claimDetails.find(
+    (detail) => detail.status === "unsupported" && detail.severity === "high"
+  );
   if (score >= 75) {
     return "This looks lower risk from the visible evidence, but it is still worth reading the original source before sharing.";
   }
   if (score >= 50) {
     return "This needs checking because the visible evidence is incomplete or only partly supported.";
+  }
+  if (primaryUnsupportedClaim) {
+    return sentenceWithPeriod(`This looks risky because ${lowerFirst(primaryUnsupportedClaim.explanation)}`);
   }
   const reason = analysis.evidenceAgainst[0] || "the visible evidence contains warning signs";
   return sentenceWithPeriod(`This looks risky because ${lowerFirst(reason)}`);
@@ -1140,9 +1196,20 @@ function buildSummary(score: number, analysis: FastRiskAnalysis): string {
 
 function buildAdvice(score: number, analysis: FastRiskAnalysis): string {
   const hasLinkRisk = analysis.signals.some((signal) => signal.category === "link-mismatch");
-  const hasScamRisk = analysis.signals.some((signal) => signal.category === "scam-language");
-  if (score < 50 && (hasLinkRisk || hasScamRisk)) {
+  const hasStrongScamRisk = analysis.signals.some(
+    (signal) => signal.category === "scam-language" && signal.weight >= 10
+  );
+  const hasHighUnsupportedClaim = analysis.claimDetails.some(
+    (detail) => detail.status === "unsupported" && detail.severity === "high"
+  );
+  if (score < 50 && hasLinkRisk) {
     return "Do not click the link or enter details. Go to the official website yourself or ask someone you trust to check it.";
+  }
+  if (score < 50 && hasHighUnsupportedClaim) {
+    return "Do not follow or share this routine based on the post alone. Check a trusted health source or ask a clinician first.";
+  }
+  if (score < 50 && hasStrongScamRisk) {
+    return "Do not act on this message yet. Check through an official source or ask someone you trust to look at it.";
   }
   if (score < 50) {
     return "Do not share or act on this yet. Check an official source or ask someone you trust.";
@@ -1156,6 +1223,12 @@ function buildAdvice(score: number, analysis: FastRiskAnalysis): string {
 function buildRecommendedAction(score: number, analysis: FastRiskAnalysis): string {
   if (score < 50 && analysis.signals.some((signal) => signal.category === "link-mismatch")) {
     return "Do not click. Type the official website address yourself.";
+  }
+  if (
+    score < 50 &&
+    analysis.claimDetails.some((detail) => detail.status === "unsupported" && detail.severity === "high")
+  ) {
+    return "Do not follow or share this health routine without checking a trusted health source.";
   }
   if (score < 50) return "Do not share yet. Check a trusted source first.";
   if (score < 75) return "Look for another reliable source before sharing.";
@@ -1615,6 +1688,16 @@ function dedupe(items: string[]): string[] {
   return [...new Set(items.filter((item) => item.trim()).map((item) => item.trim()))];
 }
 
+function dedupeClaimDetails(details: ClaimDetail[]): ClaimDetail[] {
+  const seen = new Set<string>();
+  return details.filter((detail) => {
+    const key = `${detail.category}:${detail.claim.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function publicRiskSignals(signals: RiskSignal[]): PublicRiskSignal[] {
   const byCategory = new Map<RiskSignal["category"], RiskSignal>();
   for (const signal of signals) {
@@ -1729,6 +1812,33 @@ function sanitizeRiskSignals(signals: PublicRiskSignal[] | undefined): PublicRis
   return cleaned.length ? cleaned : undefined;
 }
 
+function sanitizeClaimDetails(details: ClaimDetail[] | undefined): ClaimDetail[] | undefined {
+  if (!Array.isArray(details)) return undefined;
+  const cleaned = details
+    .filter((detail) =>
+      Boolean(detail) &&
+      ["weight-loss", "health", "product", "source", "other"].includes(detail.category) &&
+      ["unsupported", "needs_checking", "supported"].includes(detail.status) &&
+      ["low", "medium", "high"].includes(detail.severity) &&
+      typeof detail.claim === "string" &&
+      typeof detail.explanation === "string"
+    )
+    .slice(0, 6)
+    .map((detail) => ({
+      category: detail.category,
+      status: detail.status,
+      severity: detail.severity,
+      claim: detail.claim.slice(0, 300),
+      explanation: detail.explanation.slice(0, 700),
+      missingEvidence: sanitizeList(detail.missingEvidence).slice(0, 6),
+      guidanceComparison:
+        typeof detail.guidanceComparison === "string" && detail.guidanceComparison.trim()
+          ? detail.guidanceComparison.slice(0, 500)
+          : undefined
+    }));
+  return cleaned.length ? cleaned : undefined;
+}
+
 function sanitizeAccountCredibility(value: AccountCredibility | undefined): AccountCredibility | undefined {
   if (!value || typeof value !== "object") return undefined;
   const level = ["low", "medium", "high", "unknown"].includes(value.level) ? value.level : "unknown";
@@ -1801,6 +1911,10 @@ function mergeModelAssessment(
     evidenceFor: dedupe([...baseline.evidenceFor, ...model.evidenceFor]).slice(0, 6),
     evidenceAgainst: dedupe([...baseline.evidenceAgainst, ...model.evidenceAgainst]).slice(0, 6),
     missingSignals: dedupe([...baseline.missingSignals, ...model.missingSignals]).slice(0, 6),
+    claimDetails: dedupeClaimDetails([
+      ...(baseline.claimDetails || []),
+      ...(model.claimDetails || [])
+    ]).slice(0, 6),
     riskSignals: model.riskSignals?.length ? model.riskSignals : baseline.riskSignals,
     requestedActions: model.requestedActions?.length ? model.requestedActions : baseline.requestedActions,
     accountCredibility: model.accountCredibility || baseline.accountCredibility,
@@ -1949,7 +2063,8 @@ function buildWhy(
   score: number,
   evidenceAgainst: string[],
   missingSignals: string[],
-  evidenceFor: string[]
+  evidenceFor: string[],
+  claimDetails: ClaimDetail[] | undefined = undefined
 ): string[] {
   if (score >= 75) {
     return [
@@ -1958,7 +2073,15 @@ function buildWhy(
     ];
   }
 
-  const why = [...evidenceAgainst, ...missingSignals].slice(0, 3);
+  const claimReasons = (claimDetails || [])
+    .filter((detail) => detail.status === "unsupported")
+    .flatMap((detail) => [
+      detail.explanation,
+      detail.guidanceComparison,
+      detail.missingEvidence.length ? `Missing support: ${detail.missingEvidence.slice(0, 2).join("; ")}.` : undefined
+    ])
+    .filter((item): item is string => Boolean(item));
+  const why = dedupe([...claimReasons, ...evidenceAgainst, ...missingSignals]).slice(0, 3);
   if (why.length) return why;
 
   return [

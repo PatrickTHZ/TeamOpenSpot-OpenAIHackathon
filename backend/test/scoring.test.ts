@@ -189,7 +189,7 @@ describe("heuristicAssessment", () => {
     expect(result.band).toBe("red");
     expect(result.riskLevel).toBe("high");
     expect(result.label).toBe("Suspicious");
-    expect(result.advice).toContain("Do not click");
+    expect(result.advice).toContain("Do not act");
     expect(result.missingSignals.join(" ")).toContain("Video and audio");
   });
 
@@ -420,9 +420,24 @@ describe("heuristicAssessment", () => {
       }
     });
 
+    expect(result.score).toBeGreaterThanOrEqual(20);
+    expect(result.score).toBeLessThanOrEqual(35);
     expect(result.riskLevel).toBe("high");
+    expect(result.plainLanguageSummary).toContain("No trusted clinical or nutrition support");
+    expect(result.why[0]).toContain("No trusted clinical or nutrition support");
+    expect(result.advice).toContain("Do not follow or share this routine");
+    expect(result.recommendedAction).toContain("Do not follow or share this health routine");
     expect(result.evidenceAgainst.join(" ")).toContain("specific rapid weight loss");
     expect(result.missingSignals.join(" ")).toContain("clinician/dietitian credential");
+    expect(result.claimDetails?.[0]).toMatchObject({
+      category: "weight-loss",
+      status: "unsupported",
+      severity: "high"
+    });
+    expect(result.claimDetails?.[0]?.claim).toContain("400g of spinach");
+    expect(result.claimDetails?.[0]?.claim).toContain("4kg");
+    expect(result.claimDetails?.[0]?.explanation).toContain("single-food/simple daily routine");
+    expect(result.claimDetails?.[0]?.guidanceComparison).toContain("1-2 lb per week");
     expect(result.riskSignals?.some((signal) => signal.message.includes("Specific rapid weight-loss claim"))).toBe(true);
   });
 

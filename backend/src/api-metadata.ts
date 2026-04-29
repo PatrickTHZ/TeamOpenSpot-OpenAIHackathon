@@ -70,6 +70,7 @@ export function assessSchema() {
       evidenceFor: "Supporting signals",
       evidenceAgainst: "Risk signals",
       missingSignals: "Evidence gaps",
+      claimDetails: "Structured claim-level explanation with unsupported claim, missing evidence, and safer guidance comparison",
       recommendedAction: "Short action CTA",
       riskSignals: "Category-level risk trace for frontend/debug use",
       requestedActions: "Detected actions the content asks the user to take",
