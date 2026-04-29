@@ -12,14 +12,14 @@ This deployment runs the TrustLens backend API as a Docker container on TrueNAS.
 
 ## Files
 
-- `docker-compose.yml` - TrueNAS/Docker Compose service definition.
+- `docker-compose.yml` - TrueNAS/Docker Compose service definition using the published GHCR image.
 - `.env.example` - copy to `.env` and add real API keys.
 
 Do not commit `.env`.
 
 ## Setup
 
-1. Copy the repo to TrueNAS or point your TrueNAS app/custom compose project at the repo.
+1. Copy `deploy/truenas/docker-compose.yml` and `deploy/truenas/.env.example` to a directory on TrueNAS.
 2. Copy the env template:
 
 ```sh
@@ -49,10 +49,11 @@ EVIDENCE_ADMIN_TOKEN=change-me
 ASSESSMENT_LOG_DETAIL=debug
 ```
 
-4. Start the service from the repo root:
+4. Start the service from the TrueNAS deploy directory:
 
 ```sh
-docker compose -f deploy/truenas/docker-compose.yml up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 5. Test locally:
@@ -122,18 +123,46 @@ https://trustlens.z2hs.au/v1/assess
 - The named volume `trustlens-evidence` stores evidence at `/data/evidence`. To use a TrueNAS dataset directly, replace the named volume with a host path mount.
 - Runtime logs avoid raw post text. They include request ID, client, safe source host, captured evidence types, score, band, label, risk level, risk signals, latency, OCR status, and storage status.
 
+## Updating the Container
+
+Run these commands on TrueNAS from the directory containing `docker-compose.yml` and `.env`:
+
+```sh
+sudo docker compose pull trustlens-api
+sudo docker compose up -d trustlens-api
+sudo docker compose logs --tail=80 trustlens-api
+```
+
+If you are managing the container without Compose, replace only the TrustLens container:
+
+```sh
+sudo docker pull ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
+sudo docker stop trustlens-api
+sudo docker rm trustlens-api
+sudo docker run -d \
+  --name trustlens-api \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 5072:5072 \
+  -v trustlens-evidence:/data/evidence \
+  ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
+sudo docker logs --tail=80 trustlens-api
+```
+
+Do not stop `ix-culler-app-1` when updating TrustLens; that is a separate app.
+
 ## Watching Assessment Logs
 
 Follow the backend logs while requests flow through:
 
 ```sh
-docker logs -f trustlens-backend
+docker logs -f trustlens-api
 ```
 
 Or with Compose:
 
 ```sh
-docker compose -f deploy/truenas/docker-compose.yml logs -f trustlens-backend
+docker compose logs -f trustlens-api
 ```
 
 Each successful assessment writes one JSON line with `event: "assessment_result"`:

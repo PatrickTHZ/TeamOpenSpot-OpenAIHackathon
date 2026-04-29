@@ -1,9 +1,8 @@
 services:
-  trustlens-backend:
-    build:
-      context: ../..
-      dockerfile: backend/Dockerfile
-    container_name: trustlens-backend
+  trustlens-api:
+    image: ghcr.io/patrickthz/teamopenspot-openaihackathon:latest
+    pull_policy: always
+    container_name: trustlens-api
     restart: unless-stopped
     env_file:
       - .env
