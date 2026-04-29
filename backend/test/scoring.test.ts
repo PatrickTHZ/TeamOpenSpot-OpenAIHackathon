@@ -872,6 +872,37 @@ describe("heuristicAssessment", () => {
     expect(result.claimDetails?.[0]?.guidanceComparison).toContain("1-2 lb per week");
   });
 
+  it("flags raw mushroom gut-health routines aimed at older adults", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Send post",
+      visibleText:
+        "Like\nComment\nSend post\nAdd to Saved\nhealth.que.en 🍄✨ Your gut will thank you for this simple daily habit! Did you know raw mushrooms are packed with natural enzymes that help balance gut bacteria, especially for older adults? Adding just a handful of fresh mushrooms to your daily routine may support digestion, reduce bloating, and keep your gut feeling light and happy. Sometimes the simplest foods make the biggest difference. Save this and try it today.",
+      screenshotOcrText:
+        "Image or video description: Photo by health.que.en, 0 likes\nImage or video description: health.que.en posted a photo 1 hour ago\nImage or video description: Profile picture of health.que.en",
+      visibleProfileSignals: ["App detected: Instagram", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: {
+        mediaType: "image/jpeg",
+        description:
+          "Image or video description: Photo by health.que.en, 0 likes\nImage or video description: health.que.en posted a photo 1 hour ago"
+      }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.score).toBeLessThan(50);
+    expect(result.evidenceAgainst.join(" ")).toContain("raw mushrooms");
+    expect(result.missingSignals.join(" ")).toContain("food-safety caution");
+    expect(result.claimDetails?.[0]).toMatchObject({
+      category: "health",
+      status: "unsupported",
+      severity: "high"
+    });
+    expect(result.claimDetails?.[0]?.claim).toContain("Raw mushrooms");
+    expect(result.claimDetails?.[0]?.missingEvidence.join(" ")).toContain("Food-safety guidance");
+    expect(result.claimDetails?.[0]?.guidanceComparison).toContain("older adults");
+  });
+
   it("detects common generated-by-AI image wording", () => {
     const result = heuristicAssessment({
       client: "chrome",

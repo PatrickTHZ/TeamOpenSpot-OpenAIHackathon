@@ -1052,6 +1052,7 @@ function assessClaimSupport(
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
   const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
   const spinachRoutineConcern = detectHighDoseSpinachRoutineConcern(text);
+  const rawMushroomConcern = detectRawMushroomElderlyHealthClaim(text);
   const investmentBaitClaim = detectInvestmentBaitClaim(text);
   const eventTicketSalesPost = isEventTicketSalesPost(text);
 
@@ -1086,6 +1087,18 @@ function assessClaimSupport(
       message: spinachRoutineConcern.signalMessage
     });
     scoreDelta -= 22;
+  }
+
+  if (rawMushroomConcern && !trustedSupport) {
+    evidenceAgainst.push(rawMushroomConcern.evidenceMessage);
+    missingSignals.push(rawMushroomConcern.missingMessage);
+    claimDetails.push(rawMushroomConcern.detail);
+    signals.push({
+      category: "claim-verification",
+      weight: 18,
+      message: rawMushroomConcern.signalMessage
+    });
+    scoreDelta -= 20;
   }
 
   if (investmentBaitClaim && !trustedSupport) {
@@ -1507,6 +1520,50 @@ function detectHighDoseSpinachRoutineConcern(text: string): {
   };
 }
 
+function detectRawMushroomElderlyHealthClaim(text: string): {
+  evidenceMessage: string;
+  missingMessage: string;
+  signalMessage: string;
+  detail: ClaimDetail;
+} | null {
+  const mentionsRawMushrooms =
+    /\b(raw|fresh|uncooked)\s+mushrooms?\b/.test(text) ||
+    /\bmushrooms?\b.{0,80}\b(raw|fresh|uncooked)\b/.test(text);
+  const targetsOlderAdults = /\b(seniors?|elderly|older adults?|older people|over\s*\d{2})\b/.test(text);
+  const dailyRoutine = /\b(daily|every day|daily routine|simple daily habit|habit|try it today|save this)\b/.test(text);
+  const gutHealthClaim =
+    /\b(gut health|gut bacteria|balance gut|digestion|digestive|bloating|enzymes?|healthy digestion|happy gut|feel lighter)\b/.test(
+      text
+    );
+
+  if (!mentionsRawMushrooms || !gutHealthClaim || !(targetsOlderAdults || dailyRoutine)) return null;
+
+  const audience = targetsOlderAdults ? " for older adults" : "";
+
+  return {
+    evidenceMessage: `The post promotes raw mushrooms${audience} as a daily gut-health routine, but no trusted nutrition or food-safety source is visible.`,
+    missingMessage:
+      "No citation, clinician/dietitian credential, food-safety caution, or evidence for the gut-bacteria/enzyme claim is visible.",
+    signalMessage: "Raw mushroom gut-health routine lacks visible trusted support and safety context.",
+    detail: {
+      category: "health",
+      status: "unsupported",
+      severity: "high",
+      claim: `Raw mushrooms are presented as a daily routine that supports gut health${audience}.`,
+      explanation:
+        "The post targets digestion, gut bacteria, or bloating with a raw-food routine, but does not show clinical nutrition evidence or food-safety cautions.",
+      missingEvidence: [
+        "Trusted clinical, nutrition, or food-safety source",
+        "Clinician or registered dietitian credential",
+        "Food-safety guidance for older adults",
+        "Evidence for the gut bacteria, enzyme, digestion, or bloating claims"
+      ],
+      guidanceComparison:
+        "Food-safety guidance treats older adults as higher risk for foodborne illness and emphasizes careful handling of raw foods; broad gut-health claims about raw mushrooms need credible nutrition evidence."
+    }
+  };
+}
+
 function detectInvestmentBaitClaim(text: string): {
   evidenceMessage: string;
   missingMessage: string;
@@ -1639,6 +1696,7 @@ function isOrdinarySocialPost(
   if (signals.some((signal) => signal.weight >= 14 && signal.category !== "source-credibility")) return false;
   if (detectRapidWeightLossClaim(text)) return false;
   if (detectHighDoseSpinachRoutineConcern(text)) return false;
+  if (detectRawMushroomElderlyHealthClaim(text)) return false;
   if (isHighImpactClaim(text) && !isLocalIncidentDiscussion(text) && !isInstitutionalSourceContext(request, text)) {
     return false;
   }
@@ -1689,7 +1747,14 @@ function isBenignSearchResultViewer(
   signals: RiskSignal[]
 ): boolean {
   if (!isSearchResultViewer(request, text)) return false;
-  if (isHighImpactClaim(text) || detectRapidWeightLossClaim(text) || detectHighDoseSpinachRoutineConcern(text)) return false;
+  if (
+    isHighImpactClaim(text) ||
+    detectRapidWeightLossClaim(text) ||
+    detectHighDoseSpinachRoutineConcern(text) ||
+    detectRawMushroomElderlyHealthClaim(text)
+  ) {
+    return false;
+  }
   if (signals.some((signal) => signal.weight >= 10 && signal.category !== "source-credibility")) return false;
   return hasInstitutionalSearchResultContext(request, text);
 }
