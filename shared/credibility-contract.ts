@@ -124,7 +124,7 @@ export interface RequestedAction {
 }
 
 export interface WebVerification {
-  status: "skipped" | "checked" | "unavailable";
+  status: "checked" | "unavailable";
   summary: string;
   claims: VerifiedClaim[];
   sources: VerificationSource[];
@@ -191,7 +191,109 @@ export const credibilityResponseJsonSchema = {
       items: { type: "string" },
       maxItems: 6
     },
-    recommendedAction: { type: "string", minLength: 1 }
+    recommendedAction: { type: "string", minLength: 1 },
+    riskSignals: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["category", "severity", "message"],
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "scam-language",
+              "account-credibility",
+              "source-credibility",
+              "link-mismatch",
+              "claim-verification",
+              "ai-image-suspicion"
+            ]
+          },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          message: { type: "string" }
+        }
+      },
+      maxItems: 8
+    },
+    requestedActions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["action", "risk", "advice"],
+        properties: {
+          action: {
+            type: "string",
+            enum: [
+              "click_link",
+              "call_phone",
+              "send_money",
+              "share_code",
+              "share_personal_info",
+              "download_file",
+              "reply_message"
+            ]
+          },
+          risk: { type: "string", enum: ["low", "medium", "high"] },
+          target: { type: "string" },
+          advice: { type: "string" }
+        }
+      },
+      maxItems: 6
+    },
+    accountCredibility: {
+      type: "object",
+      additionalProperties: false,
+      required: ["level", "summary", "signalsFor", "signalsAgainst", "missingSignals"],
+      properties: {
+        level: { type: "string", enum: ["low", "medium", "high", "unknown"] },
+        summary: { type: "string" },
+        signalsFor: { type: "array", items: { type: "string" }, maxItems: 6 },
+        signalsAgainst: { type: "array", items: { type: "string" }, maxItems: 6 },
+        missingSignals: { type: "array", items: { type: "string" }, maxItems: 6 }
+      }
+    },
+    analysisVersion: { type: "string" },
+    webVerification: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "summary", "claims", "sources"],
+      properties: {
+        status: { type: "string", enum: ["checked", "unavailable"] },
+        summary: { type: "string" },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["claim", "verdict", "explanation"],
+            properties: {
+              claim: { type: "string" },
+              verdict: { type: "string", enum: ["supported", "unsupported", "mixed", "not_found"] },
+              explanation: { type: "string" }
+            }
+          },
+          maxItems: 5
+        },
+        sources: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["title", "url"],
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              sourceType: { type: "string", enum: ["official", "news", "medical", "other"] }
+            }
+          },
+          maxItems: 8
+        }
+      }
+    },
+    evidenceId: { type: "string" },
+    storedEvidenceUrl: { type: "string" }
   }
 } as const;
 

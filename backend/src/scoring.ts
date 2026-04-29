@@ -718,6 +718,11 @@ function assessLinkMismatch(
     });
     if (mismatchedAnchor) {
       evidenceAgainst.push("A visible link label points to a different destination domain.");
+      signals.push({
+        category: "link-mismatch",
+        weight: 18,
+        message: "Visible link label and destination domain do not match."
+      });
       scoreDelta -= 18;
     }
   }
@@ -774,7 +779,7 @@ function assessClaimSupport(
   }
 
   if (imageExtractedClaim && !trustedDomain) {
-    evidenceAgainst.push("OCR/image evidence contains a product, health, or before/after claim without trusted support.");
+    evidenceAgainst.push("Text found in the image makes a product, health, or before/after claim without trusted support.");
     signals.push({
       category: "claim-verification",
       weight: 16,
@@ -794,7 +799,7 @@ function assessClaimSupport(
   }
 
   if (/screenshot|image says|photo shows|look at this/.test(text) && !request.screenshotOcrText && !request.imageCrop?.description) {
-    missingSignals.push("The claim depends on an image, but no OCR text or image description was captured.");
+    missingSignals.push("The claim depends on an image, but no text from the image or image description was captured.");
     scoreDelta -= 8;
   }
 
@@ -818,26 +823,28 @@ function assessImageSuspicion(
   let scoreDelta = 0;
 
   if (request.imageCrop?.dataUrl || request.imageCrop?.description) {
-    evidenceFor.push("An image crop was supplied for OCR or image-risk analysis.");
+    evidenceFor.push("An image from the post was supplied for checking.");
   } else {
-    missingSignals.push("No image crop was supplied for AI-image suspicion checks.");
+    missingSignals.push("No image was supplied, so the picture itself could not be checked.");
     return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
   }
 
   const imageText = imageEvidenceText(request);
-  const explicitSynthetic = /synthetic|demo example|misinformation-detection testing|ai generated|ai-generated|generated image|made with ai|dall-?e|midjourney|stable diffusion|deepfake/.test(imageText);
+  const explicitSynthetic = /\b(synthetic|demo example|misinformation-detection testing|ai[-\s]?generated|generated\s+(?:by|with)\s+ai|(?:image|photo|picture|artwork)\s+(?:was\s+)?generated\s+by\s+ai|ai[-\s]?created|ai[-\s]?enhanced|generated image|made with ai|dall-?e|midjourney|stable diffusion|deepfake)\b/.test(imageText);
   const manipulationCue = /photoshop|edited|fake image|manipulated|retouched|airbrushed|face swap|filter/.test(imageText);
+  const imageClaim = hasImageExtractedClaim(imageText);
 
   if (explicitSynthetic || manipulationCue) {
-    evidenceAgainst.push("The image/OCR evidence mentions possible editing, AI generation, or manipulation.");
+    const weight = explicitSynthetic ? (imageClaim ? 18 : 8) : 12;
+    evidenceAgainst.push("The image evidence mentions possible editing, AI generation, or manipulation.");
     signals.push({
       category: "ai-image-suspicion",
-      weight: explicitSynthetic ? 18 : 12,
+      weight,
       message: explicitSynthetic
         ? "Image text or description indicates synthetic or AI-generated content."
         : "Image text or description mentions manipulation."
     });
-    scoreDelta -= explicitSynthetic ? 18 : 12;
+    scoreDelta -= weight;
   }
 
   if (hasImageExtractedClaim(imageText) && /before|after|transformation|changed my|skin looks tighter|lines look softer|3 months?/.test(imageText)) {
@@ -856,7 +863,7 @@ function assessImageSuspicion(
   }
 
   if (!request.imageCrop?.dataUrl) {
-    missingSignals.push("Only an image description was supplied, so visual manipulation checks are limited.");
+    missingSignals.push("Only a written image description was supplied, so picture checks are limited.");
   }
 
   return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
@@ -1288,8 +1295,7 @@ function accountCredibilitySummary(
 function imageEvidenceText(request: CredibilityAssessRequest): string {
   return [
     request.screenshotOcrText,
-    request.imageCrop?.description,
-    request.visibleText
+    request.imageCrop?.description
   ]
     .filter(Boolean)
     .join(" ")
@@ -1308,7 +1314,16 @@ function dedupe(items: string[]): string[] {
 }
 
 function publicRiskSignals(signals: RiskSignal[]): PublicRiskSignal[] {
-  return signals
+  const byCategory = new Map<RiskSignal["category"], RiskSignal>();
+  for (const signal of signals) {
+    const current = byCategory.get(signal.category);
+    if (!current || signal.weight > current.weight) {
+      byCategory.set(signal.category, signal);
+    }
+  }
+
+  return [...byCategory.values()]
+    .sort((a, b) => b.weight - a.weight)
     .slice(0, 8)
     .map((signal) => ({
       category: signal.category,

@@ -69,7 +69,7 @@ Optional useful fields:
 - `visibleProfileSignals`
 - `accountContext`: optional visible poster profile details and recent visible post samples
 - `extractedLinks`: links from DOM, OCR, visible text, or manual selection
-- `imageCrop`: optional cropped screenshot data URL or description for OpenAI OCR/image-risk analysis
+- `imageCrop`: optional cropped screenshot data URL or description for OCR/image-risk analysis. Crop coordinates alone do not count as evidence.
 - `consentToStoreEvidence`: must be `true` before self-host training evidence can be stored
 - `consentLabel`: short consent/audit label, such as `training-qa-v1`
 - `locale`
@@ -158,7 +158,7 @@ OCR_LANG=eng
 OCR_TIMEOUT_MS=3000
 ```
 
-The Docker image installs system Tesseract. OCR is best-effort: if Tesseract is unavailable, slow, or cannot read the image, the API continues using the visible text, links, image description, and optional OpenAI refinement. Cloudflare Worker deployment does not run backend OCR.
+The Docker image installs system Tesseract. OCR is best-effort: if Tesseract is unavailable, slow, or cannot read the image, the API continues using the visible text, links, image description, and optional OpenAI refinement. Cloudflare Worker deployment does not run backend OCR. OpenAI vision is separate from OCR: it only runs during model refinement when `OPENAI_ENABLE_VISION=true`.
 
 OCR text is not just used to discover links. It is fed into the same scam-language, claim-verification, requested-action, and AI-image suspicion rules as visible post text. For example, a screenshot that says a wellness gel changed someone's face in 3 months can be flagged as an unsupported product/health transformation claim even when there is no clickable link in the image.
 

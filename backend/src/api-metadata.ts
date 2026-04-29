@@ -48,9 +48,10 @@ export function assessSchema() {
       authorHandle: "Visible source/account handle",
       visibleProfileSignals: "Array of visible account/source signals",
       accountContext:
-        "Optional deep profile context: { profileUrl?, displayName?, handle?, bioText?, accountAgeText?, followerCountText?, friendCountText?, verificationSignals?, recentPosts? }",
+        "Optional deep profile context: { profileUrl?, displayName?, handle?, bioText?, accountAgeText?, followerCountText?, friendCountText?, locationText?, verificationSignals?, recentPosts?: [{ text?, url?, postedAtText?, reactionCountText?, shareCountText? }] }",
       extractedLinks: "Array of { text?, href, source? }",
-      imageCrop: "Optional { dataUrl?, mediaType?, description?, crop? }",
+      imageCrop:
+        "Optional { dataUrl?, mediaType?, description?, crop? }. Use dataUrl or description as evidence; crop coordinates alone are not enough.",
       contentType: "post | article | reel | unknown",
       locale: "BCP-47 locale hint, for example en-AU",
       consentToStoreEvidence: "true only when user agrees to training/QA storage",

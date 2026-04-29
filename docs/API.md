@@ -26,6 +26,7 @@ Base URLs:
 - `extractedLinks` is capped at `16` links.
 - `extractedLinks[].source` can be `visible`, `ocr`, `dom`, or `manual`.
 - `imageCrop.dataUrl` must be a PNG, JPEG, or WebP base64 data URL.
+- `imageCrop.crop` coordinates alone do not count as evidence; include `imageCrop.dataUrl`, `imageCrop.description`, or `screenshotOcrText`.
 - Decoded image crop bytes are capped at about `1.8MB`.
 - Docker/self-host can OCR `imageCrop.dataUrl` with Tesseract when `OCR_ENABLED=true`.
 - Cloudflare Worker does not run local OCR; send `screenshotOcrText` from the client or enable OpenAI vision.
@@ -136,28 +137,12 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
     "missingSignals": ["Follower or friend count was not visible."]
   },
   "analysisVersion": "risk-rules-2026-04-29.3",
-  "webVerification": {
-    "status": "checked",
-    "summary": "Optional source checking result when verificationMode is web.",
-    "claims": [
-      {
-        "claim": "Example claim",
-        "verdict": "not_found",
-        "explanation": "No reliable supporting source was found."
-      }
-    ],
-    "sources": [
-      {
-        "title": "Example source",
-        "url": "https://example.com",
-        "sourceType": "other"
-      }
-    ]
-  },
   "evidenceId": "only-present-when-stored",
   "storedEvidenceUrl": "/v1/evidence/only-present-when-stored"
 }
 ```
+
+`webVerification` appears only when the request uses `verificationMode: "web"` and the backend has `WEB_VERIFICATION_ENABLED=true` with an OpenAI key. Fast mode omits it.
 
 `evidenceId` and `storedEvidenceUrl` appear only on self-host Docker when evidence storage is enabled and the request includes `consentToStoreEvidence: true`.
 
