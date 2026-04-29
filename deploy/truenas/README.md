@@ -5,9 +5,10 @@ This deployment runs the TrustLens backend API as a Docker container on TrueNAS.
 ## Target
 
 - Hostname: `trustlens.z2hs.au`
+- TrueNAS UI / server IP: `http://172.20.20.251/`
 - TrueNAS port: `5072`
 - Public API endpoint: `https://trustlens.z2hs.au/v1/assess`
-- Local container endpoint: `http://truenas-ip:5072/v1/assess`
+- Local container endpoint: `http://172.20.20.251:5072/v1/assess`
 
 ## Files
 
@@ -42,7 +43,7 @@ docker compose -f deploy/truenas/docker-compose.yml up -d --build
 5. Test locally:
 
 ```sh
-curl -X POST http://127.0.0.1:5072/v1/assess \
+curl -X POST http://172.20.20.251:5072/v1/assess \
   -H "Content-Type: application/json" \
   -d '{"client":"chrome","url":"https://example.com","visibleText":"Example post text"}'
 ```
@@ -54,7 +55,7 @@ Point `trustlens.z2hs.au` to the TrueNAS server or reverse proxy.
 Recommended reverse proxy rule:
 
 ```text
-trustlens.z2hs.au -> http://127.0.0.1:5072
+trustlens.z2hs.au -> http://172.20.20.251:5072
 ```
 
 Use HTTPS at the reverse proxy layer. Keep the container on plain HTTP internally.
@@ -79,4 +80,3 @@ https://trustlens.z2hs.au/v1/assess
 - The Docker service uses the same scoring logic as the Cloudflare Worker.
 - If `OPENAI_API_KEY` is missing or OpenAI fails, the backend returns a local heuristic result.
 - Runtime logs avoid raw post text and only include request ID, client, latency, band, and error category.
-
