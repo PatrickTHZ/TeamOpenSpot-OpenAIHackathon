@@ -62,6 +62,148 @@ User opens Facebook or a web feed
 -> user taps for why and what to do next
 ```
 
+## Example Assessments
+
+TrustLens is built to explain context, not just return a score. A good result means the visible post gives the user enough stable evidence to keep reading with normal caution. A bad result means the post is using pressure, hiding its source, or sending the user somewhere risky.
+
+### Good Example: Official Local Update
+
+Visible context:
+
+```text
+Severe weather update: Sandbag collection points are open from 8 AM at the local council depot.
+Full details: https://www.citycouncil.example.gov.au/emergency-updates
+```
+
+API request:
+
+```json
+{
+  "client": "android",
+  "url": "https://www.citycouncil.example.gov.au/emergency-updates",
+  "pageTitle": "Emergency updates",
+  "visibleText": "Severe weather update: Sandbag collection points are open from 8 AM at the local council depot. Full details: https://www.citycouncil.example.gov.au/emergency-updates",
+  "authorName": "Example City Council",
+  "visibleProfileSignals": ["Official council page", "Date visible"],
+  "extractedLinks": [
+    {
+      "text": "Full details",
+      "href": "https://www.citycouncil.example.gov.au/emergency-updates",
+      "source": "dom"
+    }
+  ],
+  "contentType": "social_post",
+  "locale": "en-AU"
+}
+```
+
+Result:
+
+```json
+{
+  "score": 84,
+  "band": "green",
+  "riskLevel": "low",
+  "label": "Likely safe",
+  "confidence": "medium",
+  "plainLanguageSummary": "This post has a named public source, a visible official link, and no strong pressure tactics.",
+  "why": [
+    "The visible link points to an official-looking council domain.",
+    "The post gives concrete public information instead of asking for payment or personal details.",
+    "The author and date are visible enough for the user to cross-check."
+  ],
+  "advice": "Open the linked council page before acting, especially if conditions are changing quickly.",
+  "missingSignals": ["TrustLens has not independently confirmed the council page content in this example."]
+}
+```
+
+### Bad Example: Prize Scam
+
+Visible context:
+
+```text
+URGENT: You have won a $500 grocery voucher. Claim in the next 10 minutes or it expires.
+Tap here: https://bit.ly/claim-free-voucher-now
+```
+
+API request:
+
+```json
+{
+  "client": "android",
+  "visibleText": "URGENT: You have won a $500 grocery voucher. Claim in the next 10 minutes or it expires. Tap here: https://bit.ly/claim-free-voucher-now",
+  "authorName": "Rewards Support",
+  "visibleProfileSignals": ["No verified badge", "New-looking account"],
+  "extractedLinks": [
+    {
+      "text": "Tap here",
+      "href": "https://bit.ly/claim-free-voucher-now",
+      "source": "dom"
+    }
+  ],
+  "contentType": "social_post",
+  "locale": "en-AU"
+}
+```
+
+Result:
+
+```json
+{
+  "score": 18,
+  "band": "red",
+  "riskLevel": "high",
+  "label": "Suspicious",
+  "confidence": "high",
+  "plainLanguageSummary": "This looks risky because it combines urgency, a prize claim, and a shortened link with no visible official source.",
+  "why": [
+    "The post pressures the user to act quickly.",
+    "The prize claim is not backed by a visible official source.",
+    "The shortened link hides the destination before the user taps."
+  ],
+  "advice": "Do not open the link or enter personal details. Search for the official company site separately.",
+  "evidenceAgainst": [
+    "Urgent wording",
+    "Shortened link",
+    "No official source visible"
+  ]
+}
+```
+
+### Unclear Example: Screenshot With Missing Source
+
+Visible context:
+
+```text
+Screenshot text: New rule starts tomorrow. Everyone must register online before 5 PM.
+No visible date, author, link, or official source.
+```
+
+Result:
+
+```json
+{
+  "score": 42,
+  "band": "yellow",
+  "riskLevel": "medium",
+  "label": "Cannot verify",
+  "confidence": "low",
+  "plainLanguageSummary": "The screenshot may be important, but the visible evidence is too thin to verify from the capture alone.",
+  "why": [
+    "The claim asks people to take action soon.",
+    "No source, date, or official link is visible.",
+    "Screenshots can lose important context from the original post or page."
+  ],
+  "advice": "Look for the same announcement on an official website before sharing or registering.",
+  "missingSignals": [
+    "Original URL",
+    "Publisher name",
+    "Publication date",
+    "Official source link"
+  ]
+}
+```
+
 ## Project Structure
 
 - `backend/` - TypeScript Cloudflare Worker and Docker self-host server.
