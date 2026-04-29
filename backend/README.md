@@ -241,7 +241,13 @@ Set `ASSESSMENT_LOG_DETAIL` to control verbosity:
 - `summary` logs request ID, safe source host, evidence types, score, band, label, summary, action, `why`, `claimDetails`, risk signals, latency, OCR, and storage status.
 - `off` disables assessment result logs.
 
-Raw post text and image data are not written to runtime logs.
+Set `ASSESSMENT_LOG_INPUT` to control request-input logging:
+
+- `preview` is the TrueNAS default and logs request fields with text capped at 500 characters.
+- `full` logs request text up to the backend validation caps, useful for local debugging with consent.
+- `off` disables request-input logging.
+
+Image data URLs are never printed to runtime logs. The log only records whether image data was present, an approximate byte count, crop metadata, and any text description/OCR supplied.
 
 Required request fields:
 

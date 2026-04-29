@@ -24,4 +24,5 @@ export interface Env {
   EVIDENCE_ADMIN_TOKEN?: string;
   TRAINING_ACCESS_TOKEN?: string;
   ASSESSMENT_LOG_DETAIL?: string;
+  ASSESSMENT_LOG_INPUT?: string;
 }

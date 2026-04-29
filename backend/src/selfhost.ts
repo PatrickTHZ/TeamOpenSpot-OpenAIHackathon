@@ -35,6 +35,7 @@ interface SelfHostEnv {
   EVIDENCE_ADMIN_TOKEN?: string;
   TRAINING_ACCESS_TOKEN?: string;
   ASSESSMENT_LOG_DETAIL?: string;
+  ASSESSMENT_LOG_INPUT?: string;
 }
 
 const port = Number.parseInt(process.env.PORT || "5072", 10);
@@ -66,7 +67,8 @@ const env: SelfHostEnv = {
   EVIDENCE_HASH_SALT: process.env.EVIDENCE_HASH_SALT,
   EVIDENCE_ADMIN_TOKEN: process.env.EVIDENCE_ADMIN_TOKEN,
   TRAINING_ACCESS_TOKEN: process.env.TRAINING_ACCESS_TOKEN,
-  ASSESSMENT_LOG_DETAIL: process.env.ASSESSMENT_LOG_DETAIL
+  ASSESSMENT_LOG_DETAIL: process.env.ASSESSMENT_LOG_DETAIL,
+  ASSESSMENT_LOG_INPUT: process.env.ASSESSMENT_LOG_INPUT
 };
 
 const server = createServer(async (request, response) => {
@@ -247,6 +249,7 @@ function logAssessmentResult(input: {
 
   const request = input.request;
   const assessment = input.assessment;
+  const inputLog = buildInputLog(request, input.env);
   const base = {
     event: "assessment_result",
     requestId: input.requestId,
@@ -289,6 +292,7 @@ function logAssessmentResult(input: {
     console.log(
       JSON.stringify({
         ...base,
+        input: inputLog,
         why: assessment.why,
         advice: assessment.advice,
         claimDetails: assessment.claimDetails,
@@ -305,6 +309,7 @@ function logAssessmentResult(input: {
   console.log(
     JSON.stringify({
       ...base,
+      input: inputLog,
       why: assessment.why,
       advice: assessment.advice,
       claimDetails: assessment.claimDetails?.map((detail) => ({
@@ -322,6 +327,73 @@ function logAssessmentResult(input: {
       }))
     })
   );
+}
+
+function buildInputLog(
+  request: ReturnType<typeof validateAssessRequest>,
+  env: SelfHostEnv
+): Record<string, unknown> | undefined {
+  const mode = env.ASSESSMENT_LOG_INPUT || "preview";
+  if (mode === "off") return undefined;
+  const limit = mode === "full" ? 6000 : 500;
+
+  return {
+    mode,
+    url: request.url,
+    pageTitle: textForLog(request.pageTitle, limit),
+    authorName: textForLog(request.authorName, limit),
+    authorHandle: textForLog(request.authorHandle, limit),
+    locale: request.locale,
+    contentType: request.contentType,
+    visibleText: textForLog(request.visibleText, limit),
+    selectedText: textForLog(request.selectedText, limit),
+    screenshotOcrText: textForLog(request.screenshotOcrText, limit),
+    visibleProfileSignals: request.visibleProfileSignals?.map((item) => textForLog(item, limit)),
+    extractedLinks: request.extractedLinks?.map((link) => ({
+      text: textForLog(link.text, limit),
+      href: link.href,
+      source: link.source,
+      host: safeHost(link.href)
+    })),
+    imageCrop: request.imageCrop
+      ? {
+          mediaType: request.imageCrop.mediaType,
+          hasDataUrl: Boolean(request.imageCrop.dataUrl),
+          dataUrlBytesApprox: request.imageCrop.dataUrl ? Math.round(request.imageCrop.dataUrl.length * 0.75) : 0,
+          description: textForLog(request.imageCrop.description, limit),
+          crop: request.imageCrop.crop
+        }
+      : undefined,
+    accountContext: request.accountContext
+      ? {
+          profileUrl: request.accountContext.profileUrl,
+          displayName: textForLog(request.accountContext.displayName, limit),
+          handle: textForLog(request.accountContext.handle, limit),
+          bioText: textForLog(request.accountContext.bioText, limit),
+          accountAgeText: textForLog(request.accountContext.accountAgeText, limit),
+          followerCountText: textForLog(request.accountContext.followerCountText, limit),
+          friendCountText: textForLog(request.accountContext.friendCountText, limit),
+          locationText: textForLog(request.accountContext.locationText, limit),
+          verificationSignals: request.accountContext.verificationSignals?.map((item) => textForLog(item, limit)),
+          recentPosts: request.accountContext.recentPosts?.map((post) => ({
+            text: textForLog(post.text, limit),
+            url: post.url,
+            postedAtText: textForLog(post.postedAtText, limit),
+            reactionCountText: textForLog(post.reactionCountText, limit),
+            shareCountText: textForLog(post.shareCountText, limit)
+          }))
+        }
+      : undefined,
+    consentToStoreEvidence: request.consentToStoreEvidence === true,
+    consentLabel: textForLog(request.consentLabel, limit),
+    verificationMode: request.verificationMode || "fast"
+  };
+}
+
+function textForLog(value: string | undefined, limit: number): string | undefined {
+  if (!value) return undefined;
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}...[truncated ${value.length - limit} chars]`;
 }
 
 function safeHost(value: string | undefined): string | null {
