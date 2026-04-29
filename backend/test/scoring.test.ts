@@ -28,8 +28,12 @@ describe("normalizeAssessment", () => {
     const result = normalizeAssessment({
       score: 140,
       band: "red",
+      riskLevel: "high",
+      label: "Suspicious",
       confidence: "high",
       plainLanguageSummary: "Looks supported.",
+      why: ["Named source"],
+      advice: "Read the original source.",
       evidenceFor: ["Named source"],
       evidenceAgainst: [],
       missingSignals: [],
@@ -38,6 +42,8 @@ describe("normalizeAssessment", () => {
 
     expect(result.score).toBe(100);
     expect(result.band).toBe("green");
+    expect(result.riskLevel).toBe("low");
+    expect(result.label).toBe("Likely safe");
   });
 });
 
@@ -51,6 +57,9 @@ describe("heuristicAssessment", () => {
     });
 
     expect(result.band).toBe("red");
+    expect(result.riskLevel).toBe("high");
+    expect(result.label).toBe("Suspicious");
+    expect(result.advice).toContain("Do not click");
     expect(result.missingSignals.join(" ")).toContain("Video and audio");
   });
 });
@@ -68,4 +77,3 @@ describe("extractOutputText", () => {
     ).toBe("{\"score\":60}");
   });
 });
-

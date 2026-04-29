@@ -1,6 +1,8 @@
 import {
   bandForScore,
   credibilityResponseJsonSchema,
+  labelForScore,
+  riskLevelForScore,
   type CredibilityAssessRequest,
   type CredibilityAssessResponse
 } from "../../shared/credibility-contract";
@@ -65,16 +67,32 @@ export function hasUsefulEvidence(request: CredibilityAssessRequest): boolean {
 
 export function normalizeAssessment(raw: CredibilityAssessResponse): CredibilityAssessResponse {
   const score = clampScore(raw.score);
+  const confidence = ["low", "medium", "high"].includes(raw.confidence) ? raw.confidence : "low";
+  const evidenceAgainst = sanitizeList(raw.evidenceAgainst);
+  const missingSignals = sanitizeList(raw.missingSignals);
+  const evidenceFor = sanitizeList(raw.evidenceFor);
+  const why = sanitizeList(raw.why).length
+    ? sanitizeList(raw.why).slice(0, 4)
+    : buildWhy(score, evidenceAgainst, missingSignals, evidenceFor);
+  const advice =
+    raw.advice?.trim() ||
+    raw.recommendedAction?.trim() ||
+    "Check a trusted source or ask someone you trust before clicking or sharing.";
+
   return {
     score,
     band: bandForScore(score),
-    confidence: ["low", "medium", "high"].includes(raw.confidence) ? raw.confidence : "low",
+    riskLevel: riskLevelForScore(score),
+    label: labelForScore(score, confidence),
+    confidence,
     plainLanguageSummary:
       raw.plainLanguageSummary?.trim() ||
       "There was not enough clear public evidence to make a strong credibility estimate.",
-    evidenceFor: sanitizeList(raw.evidenceFor),
-    evidenceAgainst: sanitizeList(raw.evidenceAgainst),
-    missingSignals: sanitizeList(raw.missingSignals),
+    why,
+    advice,
+    evidenceFor,
+    evidenceAgainst,
+    missingSignals,
     recommendedAction:
       raw.recommendedAction?.trim() ||
       "Check the source and look for another reliable report before sharing."
@@ -148,9 +166,18 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
   return normalizeAssessment({
     score,
     band: bandForScore(score),
+    riskLevel: riskLevelForScore(score),
+    label: labelForScore(score, "low"),
     confidence: "low",
     plainLanguageSummary:
       "This is a basic estimate from visible evidence only. Use it as a prompt to double-check before trusting or sharing.",
+    why: buildWhy(score, evidenceAgainst, missingSignals, evidenceFor),
+    advice:
+      score >= 75
+        ? "It looks safer, but still read the full source before sharing."
+        : score >= 50
+          ? "Check another reliable source or ask someone you trust before sharing."
+          : "Do not click the link or share yet. Check the official website or ask someone you trust.",
     evidenceFor,
     evidenceAgainst,
     missingSignals,
@@ -256,3 +283,24 @@ function sanitizeList(items: string[] | undefined): string[] {
     .map((item) => item.trim());
 }
 
+function buildWhy(
+  score: number,
+  evidenceAgainst: string[],
+  missingSignals: string[],
+  evidenceFor: string[]
+): string[] {
+  if (score >= 75) {
+    return [
+      evidenceFor[0] || "The visible information gives some support for this post.",
+      "No strong scam or urgency warning signs were found in the readable text."
+    ];
+  }
+
+  const why = [...evidenceAgainst, ...missingSignals].slice(0, 3);
+  if (why.length) return why;
+
+  return [
+    "There is not enough visible evidence to confirm this post.",
+    "Check an official website or another trusted source before acting."
+  ];
+}

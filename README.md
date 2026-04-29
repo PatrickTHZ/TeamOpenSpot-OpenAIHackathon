@@ -9,6 +9,28 @@ Per the current handoff scope, this repo stops after the shared contract and bac
 
 The product is intentionally cautious: it produces a credibility estimate, not a final fact-check verdict. Missing public evidence is reported as missing instead of invented.
 
+## Target User Flow
+
+```text
+User opens Facebook/web feed
+-> Trust Bubble appears
+-> user scrolls
+-> app waits, no capture
+-> user pauses for about 1.5 seconds
+-> capture visible post area
+-> extract text, image/OCR text, and links
+-> backend analyses scam language, source signals, link mismatch, and visible evidence
+-> bubble shows Low / Medium / High risk
+-> user taps bubble for a simple explanation and advice
+```
+
+Post labels:
+
+- `Likely safe`
+- `Needs checking`
+- `Suspicious`
+- `Cannot verify`
+
 ## Backend Quick Start
 
 ```powershell
@@ -56,11 +78,33 @@ Example response:
 {
   "score": 82,
   "band": "green",
+  "riskLevel": "low",
+  "label": "Likely safe",
   "confidence": "medium",
   "plainLanguageSummary": "This looks reasonably credible based on the visible source and wording.",
+  "why": [
+    "A link or page address is available for checking.",
+    "No strong scam or urgency warning signs were found in the readable text."
+  ],
+  "advice": "Still read the full source before sharing.",
   "evidenceFor": ["A link or page address is available for checking."],
   "evidenceAgainst": [],
   "missingSignals": ["No account age is visible."],
   "recommendedAction": "Still read the full source before sharing."
 }
+```
+
+High-risk example explanation:
+
+```text
+Risk: High
+Label: Suspicious
+
+Why:
+1. The post asks you to act urgently.
+2. The link does not match the official website.
+3. No trusted source confirms this claim.
+
+Advice:
+Do not click the link. Ask a family member or check the official website.
 ```

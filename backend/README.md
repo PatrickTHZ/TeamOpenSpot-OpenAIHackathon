@@ -49,6 +49,15 @@ Optional useful fields:
 
 The API returns `score`, `band`, `confidence`, `plainLanguageSummary`, `evidenceFor`, `evidenceAgainst`, `missingSignals`, and `recommendedAction`.
 
+It also returns UI-ready risk fields:
+
+- `riskLevel`: `low`, `medium`, `high`, or `unknown`
+- `label`: `Likely safe`, `Needs checking`, `Suspicious`, or `Cannot verify`
+- `why`: short explanation bullets for the tapped Trust Bubble
+- `advice`: elderly-friendly next step
+
+The Android and Chrome clients should show `riskLevel` and `label` in the floating bubble, then show `why` and `advice` after tap.
+
 ## Privacy
 
 The Worker does not store raw post text. Runtime logs contain only request ID, client type, latency, result band, and error category.
@@ -56,4 +65,3 @@ The Worker does not store raw post text. Runtime logs contain only request ID, c
 ## Fallback Behavior
 
 If `OPENAI_API_KEY` is missing, or if the OpenAI call fails, the Worker returns a local heuristic assessment. This keeps the client usable during setup and makes local testing easier.
-
