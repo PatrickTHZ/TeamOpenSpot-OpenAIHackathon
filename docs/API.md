@@ -135,7 +135,7 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
     ],
     "missingSignals": ["Follower or friend count was not visible."]
   },
-  "analysisVersion": "risk-rules-2026-04-29.2",
+  "analysisVersion": "risk-rules-2026-04-29.3",
   "webVerification": {
     "status": "checked",
     "summary": "Optional source checking result when verificationMode is web.",
@@ -182,6 +182,8 @@ Trusted examples include `.gov.au`, `.edu.au`, `.gov`, `.edu`, `.nhs.uk`, `abc.n
 
 Risky patterns include URL shorteners, punycode `xn--`, IP-address links, and domains containing `login`, `verify`, `account`, `prize`, `gift`, or `claim`.
 
-Claim verification means checking whether supplied evidence supports the claim. It does not browse the web or prove claims independently.
+Claim verification means checking whether supplied evidence supports the claim. OCR text and image descriptions are treated as claim text, not just link text. Product, wellness, skin, supplement, cure, anti-aging, or before/after claims extracted from a screenshot are lowered when no trusted support is visible.
+
+AI-image suspicion is also checked from screenshot evidence. Synthetic/demo labels, AI-generated wording, deepfake/editing/manipulation terms, and before/after transformation imagery lower credibility because the visual evidence may be staged, edited, or generated.
 
 When `verificationMode` is `web` and the backend has `WEB_VERIFICATION_ENABLED=true`, the backend asks OpenAI's hosted web search tool to look for supporting or contradicting public sources. This is slower than fast mode and should be used for a details view or user-requested source check.

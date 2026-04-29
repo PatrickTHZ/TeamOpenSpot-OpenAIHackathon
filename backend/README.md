@@ -128,8 +128,8 @@ The deterministic rules cover:
 - account credibility: poster/profile match, account age/history, verification hints, and recent visible post patterns
 - source credibility: visible author/profile signals, official-looking domains, suspicious domain patterns
 - link mismatch: shortened links, official wording pointing to unrelated domains, anchor text/domain mismatch
-- claim verification: whether high-impact claims have supplied trusted source evidence
-- AI-image suspicion: OCR/image descriptions that mention editing, deepfakes, manipulation, or sensational image claims
+- claim verification: whether high-impact claims, including OCR-extracted screenshot claims, have supplied trusted source evidence
+- AI-image suspicion: OCR/image descriptions that mention synthetic demos, AI generation, editing, deepfakes, manipulation, or before/after transformation claims
 
 ## Web Source Checking
 
@@ -160,6 +160,8 @@ OCR_TIMEOUT_MS=3000
 
 The Docker image installs system Tesseract. OCR is best-effort: if Tesseract is unavailable, slow, or cannot read the image, the API continues using the visible text, links, image description, and optional OpenAI refinement. Cloudflare Worker deployment does not run backend OCR.
 
+OCR text is not just used to discover links. It is fed into the same scam-language, claim-verification, requested-action, and AI-image suspicion rules as visible post text. For example, a screenshot that says a wellness gel changed someone's face in 3 months can be flagged as an unsupported product/health transformation claim even when there is no clickable link in the image.
+
 ## Claim Verification
 
 This backend does not claim to independently fact-check the internet in v1. It checks whether the claim is supported by evidence supplied in the request.
@@ -167,8 +169,9 @@ This backend does not claim to independently fact-check the internet in v1. It c
 Examples:
 
 - Health, emergency, finance, tax, police, legal, or recall claims need an official or established source domain.
+- Product, wellness, skin, supplement, cure, anti-aging, or before/after claims extracted from OCR need trusted support too.
 - Specific numbers, dates, or urgent instructions need a captured link/source.
-- Claims that depend on an image need OCR text, an image description, or an image crop.
+- Claims that depend on an image are checked from OCR text and image descriptions, and synthetic/demo/AI-generated cues lower credibility.
 
 If that evidence is missing, the response should say `Needs checking`, `Suspicious`, or `Cannot verify` instead of pretending the claim is true or false.
 

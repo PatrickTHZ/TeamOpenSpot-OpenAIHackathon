@@ -235,6 +235,40 @@ describe("heuristicAssessment", () => {
     expect(result.riskSignals?.some((signal) => signal.category === "ai-image-suspicion")).toBe(true);
   });
 
+  it("lowers credibility for OCR-extracted synthetic before/after product claims", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      contentType: "post",
+      authorName: "Marissa Lane",
+      screenshotOcrText:
+        "SYNTHETIC DEMO EXAMPLE For misinformation-detection testing. My aunt is 71. She started taking 1 spoon of SunBerry Gel every morning for 3 months. Her skin looks tighter. Before. After 3 months.",
+      imageCrop: {
+        description:
+          "Screenshot contains before and after face images, a SunBerry Gel jar, and synthetic demo label."
+      }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.score).toBeLessThan(45);
+    expect(result.evidenceAgainst.join(" ")).toContain("OCR/image evidence contains");
+    expect(result.riskSignals?.some((signal) => signal.category === "claim-verification")).toBe(true);
+    expect(result.riskSignals?.some((signal) => signal.category === "ai-image-suspicion")).toBe(true);
+  });
+
+  it("uses OCR claim content even when no link is present", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      screenshotOcrText:
+        "After 30 days this wellness supplement reduced wrinkles and made skin look younger. Limited time miracle results.",
+      imageCrop: {
+        description: "OCR from a product ad screenshot."
+      }
+    });
+
+    expect(result.riskLevel).toBe("high");
+    expect(result.evidenceAgainst.join(" ")).toContain("product, health, or before/after claim");
+  });
+
   it("deep-checks risky Facebook account context", () => {
     const result = heuristicAssessment({
       client: "chrome",

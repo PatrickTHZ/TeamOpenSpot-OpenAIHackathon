@@ -15,7 +15,7 @@ import type {
 import type { Env } from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const ANALYSIS_VERSION = "risk-rules-2026-04-29.2";
+const ANALYSIS_VERSION = "risk-rules-2026-04-29.3";
 const MAX_TEXT_LENGTH = 6000;
 const MAX_LINKS = 16;
 const MAX_ACCOUNT_RECENT_POSTS = 5;
@@ -651,6 +651,10 @@ function assessScamLanguage(text: string): {
     { phrase: "secret cure", weight: 18 },
     { phrase: "guaranteed", weight: 8 },
     { phrase: "they don't want you to know", weight: 12 },
+    { phrase: "before it disappears", weight: 10 },
+    { phrase: "one simple daily habit", weight: 8 },
+    { phrase: "miracle", weight: 10 },
+    { phrase: "shocking", weight: 6 },
     { phrase: "100% true", weight: 8 },
     { phrase: "breaking!!!", weight: 8 }
   ];
@@ -742,10 +746,12 @@ function assessClaimSupport(
   const signals: RiskSignal[] = [];
   let scoreDelta = 0;
 
-  const highImpact = /cure|medicine|vaccine|health|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall/.test(text);
+  const imageText = imageEvidenceText(request);
+  const highImpact = /cure|medicine|vaccine|health|emergency|evacuation|police|bank|tax|ato|mygov|medicare|investment|crypto|lawsuit|arrest|death|recall|supplement|wellness|gel|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure/.test(text);
   const hasNumbers = /\b\d{2,}[%$]?\b|\$\d+/.test(text);
   const hasDate = /\b(today|tomorrow|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/.test(text);
   const trustedDomain = domains.some(isTrustedDomain);
+  const imageExtractedClaim = hasImageExtractedClaim(imageText);
 
   if (highImpact && trustedDomain) {
     evidenceFor.push("A high-impact claim has an official or established source domain visible.");
@@ -765,6 +771,26 @@ function assessClaimSupport(
   if ((hasNumbers || hasDate) && !request.url && !request.extractedLinks?.length) {
     missingSignals.push("The post makes specific claims but no source link was captured.");
     scoreDelta -= 8;
+  }
+
+  if (imageExtractedClaim && !trustedDomain) {
+    evidenceAgainst.push("OCR/image evidence contains a product, health, or before/after claim without trusted support.");
+    signals.push({
+      category: "claim-verification",
+      weight: 16,
+      message: "Image-extracted claim lacks visible trusted support."
+    });
+    scoreDelta -= 16;
+  }
+
+  if (imageExtractedClaim && /(before|after|after\s+\d+\s+(days?|weeks?|months?|years?))/.test(imageText)) {
+    evidenceAgainst.push("The image makes a before/after transformation claim, which needs independent evidence.");
+    signals.push({
+      category: "claim-verification",
+      weight: 12,
+      message: "Before/after image claim needs independent support."
+    });
+    scoreDelta -= 10;
   }
 
   if (/screenshot|image says|photo shows|look at this/.test(text) && !request.screenshotOcrText && !request.imageCrop?.description) {
@@ -798,18 +824,33 @@ function assessImageSuspicion(
     return { scoreDelta, evidenceFor, evidenceAgainst, missingSignals, signals };
   }
 
-  const imageText = `${request.imageCrop?.description || ""} ${request.screenshotOcrText || ""}`.toLowerCase();
-  if (/ai generated|deepfake|photoshop|edited|fake image|manipulated/.test(imageText)) {
+  const imageText = imageEvidenceText(request);
+  const explicitSynthetic = /synthetic|demo example|misinformation-detection testing|ai generated|ai-generated|generated image|made with ai|dall-?e|midjourney|stable diffusion|deepfake/.test(imageText);
+  const manipulationCue = /photoshop|edited|fake image|manipulated|retouched|airbrushed|face swap|filter/.test(imageText);
+
+  if (explicitSynthetic || manipulationCue) {
     evidenceAgainst.push("The image/OCR evidence mentions possible editing, AI generation, or manipulation.");
     signals.push({
       category: "ai-image-suspicion",
+      weight: explicitSynthetic ? 18 : 12,
+      message: explicitSynthetic
+        ? "Image text or description indicates synthetic or AI-generated content."
+        : "Image text or description mentions manipulation."
+    });
+    scoreDelta -= explicitSynthetic ? 18 : 12;
+  }
+
+  if (hasImageExtractedClaim(imageText) && /before|after|transformation|changed my|skin looks tighter|lines look softer|3 months?/.test(imageText)) {
+    evidenceAgainst.push("The screenshot includes a visual transformation claim that could be staged, edited, or AI-generated.");
+    signals.push({
+      category: "ai-image-suspicion",
       weight: 12,
-      message: "Image text or description mentions manipulation."
+      message: "Before/after transformation image claim detected."
     });
     scoreDelta -= 12;
   }
 
-  if (/too good to be true|shocking photo|you won't believe/.test(text)) {
+  if (/too good to be true|shocking photo|you won't believe|shocking/.test(text)) {
     evidenceAgainst.push("The post uses sensational wording around image evidence.");
     scoreDelta -= 6;
   }
@@ -1242,6 +1283,24 @@ function accountCredibilitySummary(
     return "Some account details are visible, but more profile history would help confirm the poster.";
   }
   return "The supplied profile signals are mixed.";
+}
+
+function imageEvidenceText(request: CredibilityAssessRequest): string {
+  return [
+    request.screenshotOcrText,
+    request.imageCrop?.description,
+    request.visibleText
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function hasImageExtractedClaim(text: string): boolean {
+  const productOrHealth = /cure|medicine|wellness|supplement|gel|cream|serum|skin|wrinkle|forehead lines|anti-?aging|weight loss|diabetes|blood pressure|detox|injections?/.test(text);
+  const transformation = /before|after|after\s+\d+\s+(days?|weeks?|months?|years?)|changed my|shocking|tighter|softer|younger|refreshed|results?/.test(text);
+  const namedProduct = /\b[A-Z]?[a-z]+(?:berry|gel|serum|cream|wellness|support)\b/i.test(text);
+  return (productOrHealth && transformation) || (namedProduct && transformation);
 }
 
 function dedupe(items: string[]): string[] {

@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 
-export const API_VERSION = "2026-04-29.2";
+export const API_VERSION = "2026-04-29.3";
 
 export function publicRuntimeConfig(
   env: Pick<
