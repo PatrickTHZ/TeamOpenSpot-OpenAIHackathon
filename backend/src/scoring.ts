@@ -1045,6 +1045,7 @@ function assessClaimSupport(
     trustedDomain || institutionalContext || verifiedAccountContext || Boolean(trustedSource && !hasImageManipulationCue(imageText));
   const imageExtractedClaim = hasImageExtractedClaim(imageText);
   const rapidWeightLossClaim = detectRapidWeightLossClaim(text);
+  const spinachRoutineConcern = detectHighDoseSpinachRoutineConcern(text);
   const eventTicketSalesPost = isEventTicketSalesPost(text);
 
   if (highImpact && trustedSupport) {
@@ -1066,6 +1067,18 @@ function assessClaimSupport(
       message: rapidWeightLossClaim.signalMessage
     });
     scoreDelta -= 18;
+  }
+
+  if (spinachRoutineConcern && !rapidWeightLossClaim && !trustedSupport) {
+    evidenceAgainst.push(spinachRoutineConcern.evidenceMessage);
+    missingSignals.push(spinachRoutineConcern.missingMessage);
+    claimDetails.push(spinachRoutineConcern.detail);
+    signals.push({
+      category: "claim-verification",
+      weight: 20,
+      message: spinachRoutineConcern.signalMessage
+    });
+    scoreDelta -= 22;
   }
 
   if (eventTicketSalesPost && !highImpact && !trustedSupport) {
@@ -1423,6 +1436,50 @@ function detectRapidWeightLossClaim(text: string): {
   };
 }
 
+function detectHighDoseSpinachRoutineConcern(text: string): {
+  evidenceMessage: string;
+  missingMessage: string;
+  signalMessage: string;
+  detail: ClaimDetail;
+} | null {
+  const mentionsSpinach = /\bspinach\b/.test(text);
+  const mentionsHighDose = /\b(?:400|500)\s*g(?:rams?)?\b/.test(text);
+  const mentionsDailyRoutine = /\b(a day|per day|every day|daily|routine|habit|30\s*days?|challenge)\b/.test(text);
+  const targetsSeniors = /\b(seniors?|elderly|older adults?|over\s*\d{2})\b/.test(text);
+  const healthPromoContext =
+    /\bhealth\b/.test(text) || /\b(bloating|energy|weight|lose|loss|no gym|no pills|supplements?)\b/.test(text);
+
+  if (!mentionsSpinach || !mentionsHighDose || !mentionsDailyRoutine || !(targetsSeniors || healthPromoContext)) {
+    return null;
+  }
+
+  const doseMatch = text.match(/\b(?:400|500)\s*g(?:rams?)?\b/);
+  const dose = doseMatch?.[0] || "400g";
+  const audience = targetsSeniors ? " for seniors" : "";
+
+  return {
+    evidenceMessage: `The post promotes a high-dose spinach routine${audience} (${dose} daily) as a health or weight-loss strategy, but no clinician, dietitian, or trusted nutrition source is visible.`,
+    missingMessage:
+      "No citation, clinician/dietitian credential, safety caution, or calorie/lifestyle evidence is visible for the spinach routine claim.",
+    signalMessage: "High-dose spinach health or weight-loss routine lacks visible trusted support.",
+    detail: {
+      category: "weight-loss",
+      status: "unsupported",
+      severity: "high",
+      claim: `A daily ${dose} spinach routine is presented as a health or weight-loss strategy${audience}.`,
+      explanation:
+        "The claim is specific, health-related, and aimed at a potentially vulnerable group, but the visible post does not show clinical or nutrition evidence.",
+      missingEvidence: [
+        "Trusted clinical or nutrition source",
+        "Clinician or registered dietitian credential",
+        "Safety cautions for older adults, kidney stone risk, or medication interactions"
+      ],
+      guidanceComparison:
+        "CDC and NHLBI-style guidance emphasizes gradual weight loss around 1-2 lb per week through overall diet and activity, not a guaranteed single-food routine; kidney and medication guidance also cautions that spinach is high in oxalate and vitamin K."
+    }
+  };
+}
+
 function isGeneralNutritionWellnessAdvice(text: string): boolean {
   const discussesCramps = /\b(leg cramps?|muscle cramps?|cramps? at night|nocturnal cramps?)\b/.test(text);
   const discussesFoodOrHydration =
@@ -1511,6 +1568,7 @@ function isOrdinarySocialPost(
   if (claimDetails.some((detail) => detail.status === "unsupported" && detail.severity === "high")) return false;
   if (signals.some((signal) => signal.weight >= 14 && signal.category !== "source-credibility")) return false;
   if (detectRapidWeightLossClaim(text)) return false;
+  if (detectHighDoseSpinachRoutineConcern(text)) return false;
   if (isHighImpactClaim(text) && !isLocalIncidentDiscussion(text) && !isInstitutionalSourceContext(request, text)) {
     return false;
   }
@@ -1523,7 +1581,7 @@ function isBenignSearchResultViewer(
   signals: RiskSignal[]
 ): boolean {
   if (!isSearchResultViewer(request, text)) return false;
-  if (isHighImpactClaim(text) || detectRapidWeightLossClaim(text)) return false;
+  if (isHighImpactClaim(text) || detectRapidWeightLossClaim(text) || detectHighDoseSpinachRoutineConcern(text)) return false;
   if (signals.some((signal) => signal.weight >= 10 && signal.category !== "source-credibility")) return false;
   return hasInstitutionalSearchResultContext(request, text);
 }
