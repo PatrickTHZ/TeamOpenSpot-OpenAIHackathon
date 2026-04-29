@@ -86,6 +86,22 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
   "evidenceAgainst": ["The wording uses urgency, pressure, or scam-like promises."],
   "missingSignals": ["No account age, verification, or profile history is visible."],
   "recommendedAction": "Do not click. Type the official website address yourself.",
+  "riskSignals": [
+    {
+      "category": "link-mismatch",
+      "severity": "high",
+      "message": "Shortened or risky-looking link detected."
+    }
+  ],
+  "requestedActions": [
+    {
+      "action": "click_link",
+      "risk": "high",
+      "target": "https://account-verify-prize.example.com/login",
+      "advice": "Do not click the link. Type the official website address yourself."
+    }
+  ],
+  "analysisVersion": "risk-rules-2026-04-29.2",
   "evidenceId": "only-present-when-stored",
   "storedEvidenceUrl": "/v1/evidence/only-present-when-stored"
 }

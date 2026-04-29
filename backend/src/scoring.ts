@@ -6,11 +6,14 @@ import {
 } from "./contract.ts";
 import type {
   CredibilityAssessRequest,
-  CredibilityAssessResponse
+  CredibilityAssessResponse,
+  PublicRiskSignal,
+  RequestedAction
 } from "../../shared/credibility-contract.ts";
 import type { Env } from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const ANALYSIS_VERSION = "risk-rules-2026-04-29.2";
 const MAX_TEXT_LENGTH = 6000;
 const MAX_LINKS = 16;
 const MAX_IMAGE_DATA_URL_LENGTH = 2_500_000;
@@ -144,7 +147,10 @@ export function normalizeAssessment(raw: CredibilityAssessResponse): Credibility
     missingSignals,
     recommendedAction:
       raw.recommendedAction?.trim() ||
-      "Check the source and look for another reliable report before sharing."
+      "Check the source and look for another reliable report before sharing.",
+    riskSignals: sanitizeRiskSignals(raw.riskSignals),
+    requestedActions: sanitizeRequestedActions(raw.requestedActions),
+    analysisVersion: raw.analysisVersion?.trim() || ANALYSIS_VERSION
   };
 }
 
@@ -164,7 +170,10 @@ export function heuristicAssessment(request: CredibilityAssessRequest): Credibil
     evidenceFor: analysis.evidenceFor,
     evidenceAgainst: analysis.evidenceAgainst,
     missingSignals: analysis.missingSignals,
-    recommendedAction: buildRecommendedAction(score, analysis)
+    recommendedAction: buildRecommendedAction(score, analysis),
+    riskSignals: publicRiskSignals(analysis.signals),
+    requestedActions: detectRequestedActions(request, analysis),
+    analysisVersion: ANALYSIS_VERSION
   });
 }
 
@@ -884,6 +893,146 @@ function dedupe(items: string[]): string[] {
   return [...new Set(items.filter((item) => item.trim()).map((item) => item.trim()))];
 }
 
+function publicRiskSignals(signals: RiskSignal[]): PublicRiskSignal[] {
+  return signals
+    .slice(0, 8)
+    .map((signal) => ({
+      category: signal.category,
+      severity: signal.weight >= 16 ? "high" : signal.weight >= 10 ? "medium" : "low",
+      message: signal.message
+    }));
+}
+
+function detectRequestedActions(
+  request: CredibilityAssessRequest,
+  analysis: FastRiskAnalysis
+): RequestedAction[] {
+  const text = allText(request).toLowerCase();
+  const actions: RequestedAction[] = [];
+  const highRisk = analysis.score < 50 || analysis.signals.some((signal) => signal.weight >= 14);
+
+  if (/click|tap|open|visit|follow the link|link below/.test(text) || request.extractedLinks?.length) {
+    actions.push({
+      action: "click_link",
+      risk: highRisk ? "high" : "medium",
+      target: request.extractedLinks?.[0]?.href || request.url,
+      advice: highRisk
+        ? "Do not click the link. Type the official website address yourself."
+        : "Check the link carefully before opening it."
+    });
+  }
+
+  if (/call|phone|ring|contact us/.test(text) || /\+?\d[\d\s().-]{7,}\d/.test(text)) {
+    actions.push({
+      action: "call_phone",
+      risk: highRisk ? "high" : "medium",
+      advice: "Do not call numbers from suspicious messages. Use an official number you already trust."
+    });
+  }
+
+  if (/send money|transfer|pay now|payment|gift card|crypto|bitcoin|bank transfer/.test(text)) {
+    actions.push({
+      action: "send_money",
+      risk: "high",
+      advice: "Do not send money, gift cards, or crypto from this message."
+    });
+  }
+
+  if (/one.?time code|otp|verification code|login code|security code|password|pin\b/.test(text)) {
+    actions.push({
+      action: "share_code",
+      risk: "high",
+      advice: "Never share passwords, PINs, or login codes."
+    });
+  }
+
+  if (/medicare number|tax file number|tfn|driver licence|passport|bank details|date of birth|address/.test(text)) {
+    actions.push({
+      action: "share_personal_info",
+      risk: "high",
+      advice: "Do not send personal or identity details from this message."
+    });
+  }
+
+  if (/download|install|attachment|apk|exe|zip/.test(text)) {
+    actions.push({
+      action: "download_file",
+      risk: "high",
+      advice: "Do not download files or apps from this message."
+    });
+  }
+
+  if (/reply|respond|message me|dm me|whatsapp|telegram/.test(text)) {
+    actions.push({
+      action: "reply_message",
+      risk: highRisk ? "high" : "medium",
+      advice: "Do not reply with personal information. Check through an official channel."
+    });
+  }
+
+  return dedupeActions(actions).slice(0, 6);
+}
+
+function sanitizeRiskSignals(signals: PublicRiskSignal[] | undefined): PublicRiskSignal[] | undefined {
+  if (!Array.isArray(signals)) return undefined;
+  const cleaned = signals
+    .filter((signal) =>
+      Boolean(signal) &&
+      typeof signal.message === "string" &&
+      [
+        "scam-language",
+        "source-credibility",
+        "link-mismatch",
+        "claim-verification",
+        "ai-image-suspicion"
+      ].includes(signal.category) &&
+      ["low", "medium", "high"].includes(signal.severity)
+    )
+    .slice(0, 8)
+    .map((signal) => ({
+      category: signal.category,
+      severity: signal.severity,
+      message: signal.message.slice(0, 240)
+    }));
+  return cleaned.length ? cleaned : undefined;
+}
+
+function sanitizeRequestedActions(actions: RequestedAction[] | undefined): RequestedAction[] | undefined {
+  if (!Array.isArray(actions)) return undefined;
+  const cleaned = actions
+    .filter((action) =>
+      Boolean(action) &&
+      [
+        "click_link",
+        "call_phone",
+        "send_money",
+        "share_code",
+        "share_personal_info",
+        "download_file",
+        "reply_message"
+      ].includes(action.action) &&
+      ["low", "medium", "high"].includes(action.risk) &&
+      typeof action.advice === "string"
+    )
+    .slice(0, 6)
+    .map((action) => ({
+      action: action.action,
+      risk: action.risk,
+      target: typeof action.target === "string" ? action.target.slice(0, 500) : undefined,
+      advice: action.advice.slice(0, 240)
+    }));
+  return cleaned.length ? cleaned : undefined;
+}
+
+function dedupeActions(actions: RequestedAction[]): RequestedAction[] {
+  const seen = new Set<string>();
+  return actions.filter((action) => {
+    if (seen.has(action.action)) return false;
+    seen.add(action.action);
+    return true;
+  });
+}
+
 function lowerFirst(value: string): string {
   return value ? value.charAt(0).toLowerCase() + value.slice(1) : value;
 }
@@ -898,7 +1047,10 @@ function mergeModelAssessment(
     score: boundedScore,
     evidenceFor: dedupe([...baseline.evidenceFor, ...model.evidenceFor]).slice(0, 6),
     evidenceAgainst: dedupe([...baseline.evidenceAgainst, ...model.evidenceAgainst]).slice(0, 6),
-    missingSignals: dedupe([...baseline.missingSignals, ...model.missingSignals]).slice(0, 6)
+    missingSignals: dedupe([...baseline.missingSignals, ...model.missingSignals]).slice(0, 6),
+    riskSignals: model.riskSignals?.length ? model.riskSignals : baseline.riskSignals,
+    requestedActions: model.requestedActions?.length ? model.requestedActions : baseline.requestedActions,
+    analysisVersion: model.analysisVersion || baseline.analysisVersion || ANALYSIS_VERSION
   });
 }
 

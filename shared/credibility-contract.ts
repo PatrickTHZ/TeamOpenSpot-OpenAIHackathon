@@ -57,8 +57,36 @@ export interface CredibilityAssessResponse {
   evidenceAgainst: string[];
   missingSignals: string[];
   recommendedAction: string;
+  riskSignals?: PublicRiskSignal[];
+  requestedActions?: RequestedAction[];
+  analysisVersion?: string;
   evidenceId?: string;
   storedEvidenceUrl?: string;
+}
+
+export interface PublicRiskSignal {
+  category:
+    | "scam-language"
+    | "source-credibility"
+    | "link-mismatch"
+    | "claim-verification"
+    | "ai-image-suspicion";
+  severity: "low" | "medium" | "high";
+  message: string;
+}
+
+export interface RequestedAction {
+  action:
+    | "click_link"
+    | "call_phone"
+    | "send_money"
+    | "share_code"
+    | "share_personal_info"
+    | "download_file"
+    | "reply_message";
+  risk: "low" | "medium" | "high";
+  target?: string;
+  advice: string;
 }
 
 export const credibilityResponseJsonSchema = {

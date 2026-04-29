@@ -197,6 +197,8 @@ describe("heuristicAssessment", () => {
 
     expect(result.riskLevel).toBe("high");
     expect(result.evidenceAgainst.join(" ")).toContain("different destination domain");
+    expect(result.riskSignals?.some((signal) => signal.category === "source-credibility")).toBe(true);
+    expect(result.requestedActions?.some((action) => action.action === "click_link")).toBe(true);
   });
 
   it("flags AI image suspicion from image descriptions", () => {
@@ -210,6 +212,7 @@ describe("heuristicAssessment", () => {
 
     expect(result.riskLevel).toBe("high");
     expect(result.evidenceAgainst.join(" ")).toContain("possible editing");
+    expect(result.riskSignals?.some((signal) => signal.category === "ai-image-suspicion")).toBe(true);
   });
 
   it("adds missing signal for image-dependent claims without OCR evidence", () => {
@@ -219,6 +222,19 @@ describe("heuristicAssessment", () => {
     });
 
     expect(result.missingSignals.join(" ")).toContain("depends on an image");
+  });
+
+  it("detects concrete requested actions", () => {
+    const result = heuristicAssessment({
+      client: "chrome",
+      visibleText:
+        "Call this number, pay now with gift cards, share your one-time code, and download the attachment.",
+      extractedLinks: [{ href: "https://bit.ly/download", source: "dom" }]
+    });
+
+    expect(result.requestedActions?.map((action) => action.action)).toEqual(
+      expect.arrayContaining(["click_link", "call_phone", "send_money", "share_code", "download_file"])
+    );
   });
 });
 

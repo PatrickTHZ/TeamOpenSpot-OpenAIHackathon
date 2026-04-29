@@ -49,6 +49,9 @@ export function assessSchema() {
       evidenceAgainst: "Risk signals",
       missingSignals: "Evidence gaps",
       recommendedAction: "Short action CTA",
+      riskSignals: "Category-level risk trace for frontend/debug use",
+      requestedActions: "Detected actions the content asks the user to take",
+      analysisVersion: "Version of deterministic risk rules",
       evidenceId: "Only present when opt-in storage succeeds",
       storedEvidenceUrl: "Only present when opt-in storage succeeds"
     }
