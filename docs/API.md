@@ -30,7 +30,8 @@ Base URLs:
 - Decoded image crop bytes are capped at about `1.8MB`.
 - Docker/self-host can OCR `imageCrop.dataUrl` with Tesseract when `OCR_ENABLED=true`.
 - Cloudflare Worker does not run local OCR; send `screenshotOcrText` from the client or enable OpenAI vision.
-- Optional web source checking is available with `verificationMode: "web"` when `WEB_VERIFICATION_ENABLED=true`.
+- Web source checking uses the OpenAI Responses API hosted `web_search_preview` tool when `WEB_VERIFICATION_ENABLED=true` and `OPENAI_API_KEY` is set.
+- `verificationMode: "web"` always asks for web source checking. In fast mode, high-risk unsupported health, food, weight-loss, or product claims are also checked automatically unless `AUTO_WEB_VERIFICATION_ENABLED=false`.
 
 ## Minimal Request
 
@@ -142,7 +143,7 @@ curl -X POST https://trustlens.z2hs.au/v1/assess \
 }
 ```
 
-`webVerification` appears only when the request uses `verificationMode: "web"` and the backend has `WEB_VERIFICATION_ENABLED=true` with an OpenAI key. Fast mode omits it.
+`webVerification` appears when source checking runs. It runs for `verificationMode: "web"` and can also run in fast mode for high-risk unsupported health, food, weight-loss, or product claims when `WEB_VERIFICATION_ENABLED=true`, `AUTO_WEB_VERIFICATION_ENABLED=true`, and an OpenAI key is configured.
 
 `evidenceId` and `storedEvidenceUrl` appear only on self-host Docker when evidence storage is enabled and the request includes `consentToStoreEvidence: true`.
 
@@ -173,4 +174,17 @@ Claim verification means checking whether supplied evidence supports the claim. 
 
 AI-image suspicion is also checked from screenshot evidence. Synthetic/demo labels, AI-generated wording, deepfake/editing/manipulation terms, and before/after transformation imagery lower credibility because the visual evidence may be staged, edited, or generated.
 
-When `verificationMode` is `web` and the backend has `WEB_VERIFICATION_ENABLED=true`, the backend asks OpenAI's hosted web search tool to look for supporting or contradicting public sources. This is slower than fast mode and should be used for a details view or user-requested source check.
+When web verification runs, the backend asks OpenAI's hosted web search tool to look for supporting or contradicting public sources. For food and nutrition claims it prioritizes official food-safety, public-health, clinical, dietitian, and government guidance over blogs, social posts, or sales pages. The web result can affect the final score: unsupported or not-found results keep high-risk health/food claims low, while clearly supported claims can lift the score.
+
+Docker and TrueNAS deployments enable web verification by default in the sample env files. To disable automatic web searches but keep manual `verificationMode: "web"` available, set:
+
+```text
+WEB_VERIFICATION_ENABLED=true
+AUTO_WEB_VERIFICATION_ENABLED=false
+```
+
+To disable all hosted web search calls, set:
+
+```text
+WEB_VERIFICATION_ENABLED=false
+```

@@ -141,6 +141,9 @@ OPENAI_API_KEY=sk-your-key
 OPENAI_MODEL=gpt-5.2
 OPENAI_TIMEOUT_MS=2500
 OPENAI_ENABLE_VISION=false
+WEB_VERIFICATION_ENABLED=true
+AUTO_WEB_VERIFICATION_ENABLED=true
+WEB_VERIFICATION_TIMEOUT_MS=12000
 ```
 
 For production, store the key as a Cloudflare Worker secret:
@@ -166,6 +169,8 @@ Invoke-RestMethod http://localhost:5072/v1/assess `
   -ContentType "application/json" `
   -Body '{"client":"chrome","url":"https://example.com","visibleText":"Act now to claim your prize","extractedLinks":[{"href":"https://bit.ly/example","source":"dom"}]}'
 ```
+
+Docker and TrueNAS self-hosting use the OpenAI Responses API hosted web search tool when `WEB_VERIFICATION_ENABLED=true` and `OPENAI_API_KEY` is set. `verificationMode: "web"` forces a web source check; high-risk unsupported health, food, weight-loss, or product claims are also checked automatically in fast mode unless `AUTO_WEB_VERIFICATION_ENABLED=false`.
 
 ## API Contract
 
