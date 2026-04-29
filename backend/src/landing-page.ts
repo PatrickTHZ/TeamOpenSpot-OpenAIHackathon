@@ -1,8 +1,9 @@
 const githubRepoUrl = "https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon";
 const publicHomeUrl = "https://trustlens.z2hs.au";
-const downloadPageUrl = `${publicHomeUrl}/download`;
-const androidActionsUrl = `${githubRepoUrl}/actions/workflows/android-apk.yml?query=branch%3Amain`;
-const latestReleaseApkUrl = `${githubRepoUrl}/releases/latest/download/trustlens-debug.apk`;
+export const latestApkDownloadUrl =
+  "https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/raw/refs/heads/main/trustlens-debug.apk";
+const faviconDataUrl =
+  "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%2320283a%22/%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2218%22%20fill%3D%22%2366b7b8%22/%3E%3Cpath%20d%3D%22M22%2034l7%207%2014-18%22%20fill%3D%22none%22%20stroke%3D%22%23fbfaf7%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E";
 
 export function landingPageHtml(): string {
   return `<!doctype html>
@@ -11,6 +12,7 @@ export function landingPageHtml(): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TrustLens | Safer scrolling for real people</title>
+    <link rel="icon" type="image/svg+xml" href="${faviconDataUrl}" />
     <meta
       name="description"
       content="TrustLens is an Android credibility companion that flags risky posts, links, and screenshots while you scroll."
@@ -804,7 +806,7 @@ export function landingPageHtml(): string {
         </a>
         <div class="nav-links">
           <a href="${githubRepoUrl}">GitHub</a>
-          <a href="${downloadPageUrl}">APK</a>
+          <a href="${latestApkDownloadUrl}" download="trustlens-debug.apk">APK</a>
         </div>
       </nav>
 
@@ -816,7 +818,7 @@ export function landingPageHtml(): string {
             a clear risk label before a scam, hoax, or panic-share gets a chance to travel.
           </p>
           <div class="actions">
-            <a class="button" href="${downloadPageUrl}">Download Android APK</a>
+            <a class="button" href="${latestApkDownloadUrl}" download="trustlens-debug.apk">Download Android APK</a>
             <a class="button secondary" href="${githubRepoUrl}">View GitHub repo</a>
           </div>
           <div class="proof" aria-label="TrustLens highlights">
@@ -991,9 +993,10 @@ export function downloadPageHtml(): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Download TrustLens APK</title>
+    <link rel="icon" type="image/svg+xml" href="${faviconDataUrl}" />
     <meta
       name="description"
-      content="Download the latest TrustLens Android APK from the newest GitHub Actions build."
+      content="Download the latest TrustLens Android APK directly."
     />
     <style>
       :root {
@@ -1206,22 +1209,21 @@ export function downloadPageHtml(): string {
 
       <section class="hero">
         <div>
-          <h1>Get the newest Android build.</h1>
-          <p class="lead">TrustLens APKs are built by GitHub Actions. The latest successful Android workflow run contains the newest downloadable package as the <strong>trustlens-debug-apk</strong> artifact.</p>
+          <h1>Download TrustLens for Android.</h1>
+          <p class="lead">Get the latest TrustLens APK directly in your browser. Install it on Android to try the pause-aware credibility companion.</p>
           <div class="actions">
-            <a class="button" href="${androidActionsUrl}">Open latest Actions build</a>
-            <a class="button secondary" href="${latestReleaseApkUrl}">Try latest release APK</a>
+            <a class="button" href="${latestApkDownloadUrl}" download="trustlens-debug.apk">Download latest APK</a>
           </div>
         </div>
 
         <aside class="panel">
-          <h2>How to download</h2>
+          <h2>Install on Android</h2>
           <ol class="steps">
-            <li><span class="num">1</span><span><strong>Open the Android workflow.</strong>Use the newest successful run on the main branch.</span></li>
-            <li><span class="num">2</span><span><strong>Find Artifacts.</strong>Download <strong>trustlens-debug-apk</strong> from the run summary.</span></li>
-            <li><span class="num">3</span><span><strong>Install the APK.</strong>Unzip the artifact if needed, then install <strong>trustlens-debug.apk</strong> on Android.</span></li>
+            <li><span class="num">1</span><span><strong>Download the APK.</strong>Tap the download button and save <strong>trustlens-debug.apk</strong>.</span></li>
+            <li><span class="num">2</span><span><strong>Open the file.</strong>Use Android's installer from your browser downloads.</span></li>
+            <li><span class="num">3</span><span><strong>Allow installation.</strong>If prompted, allow installs from your browser, then continue.</span></li>
           </ol>
-          <p class="note">GitHub Actions artifacts are attached to individual workflow runs. This page always sends you to the Android build history so you can choose the newest successful APK.</p>
+          <p class="note">This is the latest debug APK for prototype testing. Android may show the standard warning for apps installed outside the Play Store.</p>
         </aside>
       </section>
     </main>

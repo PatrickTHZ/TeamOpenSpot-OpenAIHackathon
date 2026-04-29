@@ -26,18 +26,16 @@ Tapping the bubble opens a plain-language explanation with the strongest visible
 
 ## Download Android APK
 
-The website download page always sends users to the newest Android build history:
+The website download route sends users straight to the latest Android APK:
 
 ```text
 https://trustlens.z2hs.au/download
 ```
 
-The APK is built by GitHub Actions. Open the latest successful `Build Android APK` run on `main`, then download the `trustlens-debug-apk` artifact. The artifact contains `trustlens-debug.apk`.
-
-Direct build page:
+Direct APK URL:
 
 ```text
-https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/actions/workflows/android-apk.yml?query=branch%3Amain
+https://github.com/PatrickTHZ/TeamOpenSpot-OpenAIHackathon/raw/refs/heads/main/trustlens-debug.apk
 ```
 
 ## Features
@@ -233,7 +231,7 @@ http://localhost:5072
 Routes:
 
 - `GET /` - TrustLens landing page.
-- `GET /download` - APK download instructions for latest Actions artifacts.
+- `GET /download` - redirect to the latest Android APK.
 - `GET /health` - service health and public runtime config.
 - `POST /v1/assess` - credibility assessment API.
 - `GET /v1/schema` - machine-readable API schema summary.
@@ -284,7 +282,7 @@ Full API reference: [docs/API.md](docs/API.md)
 The public service is designed to sit behind `https://trustlens.z2hs.au`:
 
 - `https://trustlens.z2hs.au/` - homepage
-- `https://trustlens.z2hs.au/download` - latest APK instructions
+- `https://trustlens.z2hs.au/download` - latest APK download
 - `https://trustlens.z2hs.au/v1/assess` - API endpoint
 - `https://trustlens.z2hs.au/health` - health check
 

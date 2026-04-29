@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { API_VERSION, assessSchema, publicRuntimeConfig } from "./api-metadata.ts";
-import { downloadPageHtml, landingPageHtml } from "./landing-page.ts";
+import { landingPageHtml, latestApkDownloadUrl } from "./landing-page.ts";
 import {
   assessCredibility,
   heuristicAssessment,
@@ -97,7 +97,11 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/download") {
-      writeHtml(response, 200, downloadPageHtml());
+      response.writeHead(302, {
+        Location: latestApkDownloadUrl,
+        "Cache-Control": "no-store"
+      });
+      response.end();
       return;
     }
 
