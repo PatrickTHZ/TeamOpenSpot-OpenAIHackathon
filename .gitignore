@@ -9,3 +9,9 @@ evidence/
 backend/evidence/
 data/evidence/
 
+**/.gradle/
+build/
+**/android/**/build/
+*.apk
+*.aab
+local.properties

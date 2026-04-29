@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Trust Bubble</string>
+    <string name="trust_accessibility_service_label">Trust Bubble Scroll Detector</string>
+    <string name="trust_accessibility_service_description">Detects when supported social feeds stop scrolling and reads visible accessibility text for Trust Bubble checks.</string>
+    <string name="trust_accessibility_service_summary">Detects scroll pauses and captures visible text in supported apps.</string>
+</resources>
