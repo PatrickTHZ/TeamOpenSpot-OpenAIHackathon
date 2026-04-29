@@ -491,7 +491,10 @@ function isNonAssessableAndroidAppShell(request: CredibilityAssessRequest, text:
   const appSignals = (request.visibleProfileSignals || []).join("\n").toLowerCase();
   const title = (request.pageTitle || "").toLowerCase();
   const discordApp = /app detected:\s*(com\.)?discord\b/.test(appSignals);
-  const dialerApp = /app detected:\s*com\.samsung\.android\.dialer\b/.test(appSignals);
+  const samsungSystemApp =
+    /app detected:\s*(?:com\.samsung\.android\.(?:dialer|app\.contacts|app\.camera|app\.gallery|settings|launcher)|com\.sec\.android\.(?:app\.camera|gallery3d|app\.launcher)|com\.android\.settings)\b/.test(
+      appSignals
+    );
 
   const discordMediaPicker =
     discordApp &&
@@ -500,12 +503,18 @@ function isNonAssessableAndroidAppShell(request: CredibilityAssessRequest, text:
         text
       ));
 
-  const samsungDialerOrContacts =
-    dialerApp &&
+  const samsungControlScreen =
+    samsungSystemApp &&
     (/\b(create contact|voicemail|sim 1 button|delete last digit|meet video call|asterisk|hash)\b/.test(text) ||
-      /\b\d\s*,?\s*(?:a,b,c|d,e,f|g,h,i|j,k,l|m,n,o|p,q,r,s|t,u,v|w,x,y,z)\b/.test(text));
+      /\b\d\s*,?\s*(?:a,b,c|d,e,f|g,h,i|j,k,l|m,n,o|p,q,r,s|t,u,v|w,x,y,z)\b/.test(text) ||
+      /\b(camera|photo mode|video mode|portrait|panorama|settings|gallery|albums|pictures|screenshots|select items|share|delete|edit|more options)\b/.test(
+        text
+      ) ||
+      /\b(wi-?fi|bluetooth|connections|sounds and vibration|notifications|display|wallpaper|battery|device care|software update|about phone)\b/.test(
+        text
+      ));
 
-  return discordMediaPicker || samsungDialerOrContacts;
+  return discordMediaPicker || samsungControlScreen;
 }
 
 function skippedAppShellAssessment(): CredibilityAssessResponse {

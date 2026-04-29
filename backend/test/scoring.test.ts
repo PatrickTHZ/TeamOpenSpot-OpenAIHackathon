@@ -248,6 +248,45 @@ describe("heuristicAssessment", () => {
     expect(result.requestedActions).toBeUndefined();
   });
 
+  it("skips Samsung settings screens as app controls", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Settings",
+      visibleText:
+        "Settings\nSearch\nConnections\nWi-Fi\nBluetooth\nSounds and vibration\nNotifications\nDisplay\nWallpaper and style\nBattery\nDevice care\nSoftware update\nAbout phone",
+      screenshotOcrText: "Image or video description: Settings screen",
+      visibleProfileSignals: ["App detected: com.android.settings", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: {
+        mediaType: "image/jpeg",
+        description: "Image or video description: Settings screen"
+      }
+    });
+
+    expect(result.riskLevel).toBe("unknown");
+    expect(result.label).toBe("Cannot verify");
+  });
+
+  it("skips Samsung gallery and camera picker screens as app controls", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "Gallery",
+      visibleText:
+        "Gallery\nAlbums\nPictures\nScreenshots\nCamera\nSelect items\nShare\nDelete\nEdit\nMore options\nPhoto mode\nVideo mode",
+      screenshotOcrText:
+        "Image or video description: Photo\nImage or video description: More options\nImage or video description: Select items",
+      visibleProfileSignals: ["App detected: com.sec.android.gallery3d", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: {
+        mediaType: "image/jpeg",
+        description: "Image or video description: Photo\nImage or video description: More options"
+      }
+    });
+
+    expect(result.riskLevel).toBe("unknown");
+    expect(result.label).toBe("Cannot verify");
+  });
+
   it("flags limited reels analysis", () => {
     const result = heuristicAssessment({
       client: "android",
