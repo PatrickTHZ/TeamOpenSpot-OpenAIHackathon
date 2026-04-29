@@ -648,6 +648,24 @@ describe("heuristicAssessment", () => {
     expect(new Set(scores).size).toBeGreaterThan(1);
   });
 
+  it("does not treat food words containing ato as official tax claims", () => {
+    const result = heuristicAssessment({
+      client: "android",
+      contentType: "post",
+      pageTitle: "thegrocerystoresydney",
+      visibleText:
+        "thegrocerystoresydney\nFollow\nFollow The Grocery Store\nTomato and potato salad today. Papaya but make it spicy.\nReel by thegrocerystoresydney. Double tap to play or pause.",
+      screenshotOcrText:
+        "Image or video description: Profile picture of thegrocerystoresydney\nImage or video description: Like\nImage or video description: Comment",
+      visibleProfileSignals: ["App detected: Instagram", "Captured after scrolling paused for 1.5 seconds"],
+      imageCrop: { description: "Image or video description: Profile picture of thegrocerystoresydney" }
+    });
+
+    expect(result.riskLevel).toBe("low");
+    expect(result.evidenceAgainst.join(" ")).not.toContain("official topic");
+    expect(result.riskSignals?.some((signal) => signal.message.includes("Official-topic"))).not.toBe(true);
+  });
+
   it("treats local incident retellings as ordinary stories when they do not ask the user to act", () => {
     const result = heuristicAssessment({
       client: "android",

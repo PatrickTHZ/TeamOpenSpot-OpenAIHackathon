@@ -715,7 +715,7 @@ function assessSourceCredibility(
   }
 
   const officialClaim =
-    /official|government|bank|medicare|mygov|ato|police|council|emergency/.test(text) ||
+    /\b(official|government|bank|medicare|mygov|ato|police|council|emergency)\b/.test(text) ||
     (/\bhealth\b/.test(text) && !isGeneralNutritionWellnessAdvice(text));
   if (
     officialClaim &&
@@ -2092,7 +2092,7 @@ function hasLinkMismatch(url: string | undefined, links: string[], text: string)
   if (!baseDomain) return false;
 
   const mismatchedDomains = domains.filter((domain) => rootDomain(domain) !== rootDomain(baseDomain));
-  const mentionsOfficial = /official|government|bank|medicare|mygov|ato|police|council/.test(text);
+  const mentionsOfficial = /\b(official|government|bank|medicare|mygov|ato|police|council)\b/.test(text);
   return mismatchedDomains.length > 0 && mentionsOfficial;
 }
 
@@ -2311,7 +2311,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/send money|\btransfer\b|pay now|\bpayment\b|gift card|\bcrypto\b|\bbitcoin\b|bank transfer/.test(text)) {
+  if (/\b(send money|transfer|pay now|payment|gift card|crypto|bitcoin|bank transfer)\b/.test(text)) {
     actions.push({
       action: "send_money",
       risk: "high",
@@ -2319,7 +2319,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/one.?time code|\botp\b|verification code|login code|security code|\bpassword\b|\bpin\b/.test(text)) {
+  if (/\b(one.?time code|otp|verification code|login code|security code|password|pin)\b/.test(text)) {
     actions.push({
       action: "share_code",
       risk: "high",
@@ -2327,7 +2327,7 @@ function detectRequestedActions(
     });
   }
 
-  if (/medicare number|tax file number|tfn|driver licence|passport|bank details|date of birth|address/.test(text)) {
+  if (/\b(medicare number|tax file number|tfn|driver licence|passport|bank details|date of birth|address)\b/.test(text)) {
     actions.push({
       action: "share_personal_info",
       risk: "high",
