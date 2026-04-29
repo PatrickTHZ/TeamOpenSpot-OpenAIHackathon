@@ -2,10 +2,12 @@ import {
   bandForScore,
   credibilityResponseJsonSchema,
   labelForScore,
-  riskLevelForScore,
-  type CredibilityAssessRequest,
-  type CredibilityAssessResponse
-} from "../../shared/credibility-contract";
+  riskLevelForScore
+} from "./contract.ts";
+import type {
+  CredibilityAssessRequest,
+  CredibilityAssessResponse
+} from "../../shared/credibility-contract.ts";
 import type { Env } from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";

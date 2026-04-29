@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/selfhost.ts", "src/scoring.ts", "src/types.ts", "../shared"]
+}

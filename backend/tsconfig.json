@@ -8,8 +8,9 @@
     "skipLibCheck": true,
     "types": ["@cloudflare/workers-types"],
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src", "test", "../shared"]
+  "include": ["src/index.ts", "src/scoring.ts", "src/contract.ts", "src/types.ts", "test", "../shared"]
 }
