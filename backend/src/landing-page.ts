@@ -152,8 +152,8 @@ export function landingPageHtml(): string {
         max-width: 760px;
         margin: 0;
         color: var(--ink);
-        font-size: clamp(54px, 8vw, 108px);
-        line-height: 0.94;
+        font-size: clamp(48px, 6.8vw, 92px);
+        line-height: 0.98;
         font-weight: 780;
         letter-spacing: 0;
       }
@@ -231,27 +231,68 @@ export function landingPageHtml(): string {
         top: 18px;
         width: min(360px, 100%);
         min-height: 610px;
-        border: 10px solid #1f2737;
-        border-radius: 38px;
-        background: #f7f6f2;
-        box-shadow: var(--shadow);
+        border: 11px solid #1f2737;
+        border-radius: 46px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(246, 245, 240, 0.98)),
+          #f7f6f2;
+        box-shadow:
+          0 34px 90px rgba(32, 40, 58, 0.18),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.28);
         overflow: hidden;
       }
 
       .phone::before {
         position: absolute;
-        top: 12px;
+        top: 13px;
         left: 50%;
-        width: 92px;
-        height: 6px;
+        width: 112px;
+        height: 28px;
         border-radius: 999px;
-        background: #d8d4cd;
+        background: #1f2737;
         content: "";
         transform: translateX(-50%);
+        z-index: 4;
+      }
+
+      .phone::after {
+        position: absolute;
+        top: 23px;
+        left: 50%;
+        width: 48px;
+        height: 5px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.28);
+        content: "";
+        transform: translateX(-50%);
+        z-index: 5;
       }
 
       .screen {
-        padding: 58px 22px 24px;
+        position: relative;
+        padding: 68px 22px 24px;
+      }
+
+      .screen::before {
+        display: block;
+        margin: 0 0 16px;
+        color: var(--ink-soft);
+        content: "Today";
+        font-size: 12px;
+        font-weight: 760;
+        text-transform: uppercase;
+      }
+
+      .screen::after {
+        position: absolute;
+        left: 50%;
+        bottom: 9px;
+        width: 112px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(32, 40, 58, 0.2);
+        content: "";
+        transform: translateX(-50%);
       }
 
       .scan-card,
@@ -263,7 +304,11 @@ export function landingPageHtml(): string {
       }
 
       .scan-card {
+        position: relative;
         padding: 20px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(250, 253, 252, 0.92)),
+          var(--panel);
       }
 
       .status {
@@ -287,9 +332,12 @@ export function landingPageHtml(): string {
         border-radius: 50%;
         background: linear-gradient(135deg, var(--teal), var(--lavender));
         box-shadow: 0 0 0 8px rgba(102, 183, 184, 0.13);
+        z-index: 1;
       }
 
       .scan-title {
+        position: relative;
+        z-index: 1;
         margin: 0 0 8px;
         font-size: 27px;
         line-height: 1.08;
@@ -297,6 +345,8 @@ export function landingPageHtml(): string {
       }
 
       .scan-text {
+        position: relative;
+        z-index: 1;
         margin: 0;
         color: var(--ink-soft);
         font-size: 14px;
@@ -306,6 +356,7 @@ export function landingPageHtml(): string {
       .feed-card {
         margin-top: 16px;
         padding: 16px;
+        background: rgba(255, 255, 255, 0.76);
       }
 
       .line {
@@ -333,6 +384,7 @@ export function landingPageHtml(): string {
         box-shadow: 0 18px 42px rgba(32, 40, 58, 0.28);
         font-size: 13px;
         font-weight: 740;
+        z-index: 3;
       }
 
       .pulse {
